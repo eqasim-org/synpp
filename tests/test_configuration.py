@@ -28,26 +28,26 @@ def test_duplicate_config_default():
 def test_parameter():
     context = ConfigurationContext({}, { "abc": "def" })
 
-    assert context.param("abc") == "def"
-    assert "abc" in context.required_params
-    assert context.required_params["abc"] == "def"
+    assert context.parameter("abc") == "def"
+    assert "abc" in context.required_parameters
+    assert context.required_parameters["abc"] == "def"
 
-    assert context.param("uvw", "xyz") == "xyz"
-    assert "uvw" in context.required_params
-    assert context.required_params["uvw"] == "xyz"
+    assert context.parameter("uvw", "xyz") == "xyz"
+    assert "uvw" in context.required_parameters
+    assert context.required_parameters["uvw"] == "xyz"
 
 def test_missing_parameter():
     context = ConfigurationContext({}, {})
 
     with raises(PipelineError):
-        context.param("abc")
+        context.parameter("abc")
 
 def test_duplicate_parameter_default():
     context = ConfigurationContext({}, {})
 
     with raises(PipelineError):
-        context.param("abc", "D1")
-        context.param("abc", "D2")
+        context.parameter("abc", "D1")
+        context.parameter("abc", "D2")
 
 def test_stage():
     context = ConfigurationContext({}, {})
@@ -56,6 +56,6 @@ def test_stage():
     context.stage("stage2", { "uvw": "xyz" }, alias = "name1")
     context.stage("stage2", { "uvw": "xyz" }, alias = "name2")
 
-    assert ("stage1", {}) in context.required_stages
-    assert ("stage2", { "uvw": "xyz" }) in context.required_stages
+    assert ({"descriptor": "stage1", "parameters": {}}) in context.required_stages
+    assert ({"descriptor": "stage2", "parameters": { "uvw": "xyz" }}) in context.required_stages
     assert 2 == len(context.required_stages)

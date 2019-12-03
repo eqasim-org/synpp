@@ -1,7 +1,7 @@
 def configure(context):
-    context.param("a")
-    context.param("b")
+    context.parameter("a")
+    context.parameter("b")
 
 def execute(context):
-    a, b = context.param("a"), context.param("b")
+    a, b = context.parameter("a"), context.parameter("b")
     return a + b
