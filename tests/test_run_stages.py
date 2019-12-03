@@ -33,3 +33,11 @@ def test_sum_stages_with_files(tmpdir):
     }], config = { "a": 5, "b": 11 }, working_directory = tmpdir.mkdir("sub"))
 
     assert result[0] == 11 + 16 + 10
+
+def test_recursive(tmpdir):
+    result = synpp.run([{
+        "descriptor": "tests.fixtures.recursive",
+        "parameters": { "a": 5 }
+    }], working_directory = tmpdir.mkdir("sub"))
+
+    assert result[0] == 15

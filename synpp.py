@@ -5,6 +5,7 @@ import networkx as nx
 import pickle
 import datetime
 import shutil
+import logging
 
 class NoDefaultValue:
     pass
@@ -146,6 +147,7 @@ class StageContext:
     def __init__(self, configuration_context, dependencies):
         self.configuration_context = configuration_context
         self.dependencies = dependencies
+        self.info_data = {}
 
     def parameter(self, name):
         if not name in self.configuration_context.required_parameters:
@@ -175,7 +177,15 @@ class StageContext:
 
         return self.dependencies[self.configuration_context.required_stages.index(definition)]
 
-def run(definitions, config = {}, working_directory = None, verbose = False):
+    def info(self, name, value):
+        self.info_data[name] = value
+
+def run(definitions, config = {}, working_directory = None, verbose = False, logger = logging.getLogger("synpp")):
+    logger.setLevel(logging.WARNING)
+
+    handler = logging.StreamHandler()
+    logger.addHandler(handler)
+
     # 1) Construct stage objects
     pending_definitions = definitions[:]
 
@@ -233,6 +243,8 @@ def run(definitions, config = {}, working_directory = None, verbose = False):
         if definition in definitions:
             required_names.append(hashed_name)
 
+    logger.info("Found %d stages" % len(hashed_registry))
+
     # 2) Order stages
     graph = nx.DiGraph()
 
@@ -256,33 +268,58 @@ def run(definitions, config = {}, working_directory = None, verbose = False):
         try:
             with open("%s/pipeline.json" % working_directory) as f:
                 meta = json.load(f)
+                logger.info("Found pipeline metadata in %s/pipeline.json" % working_directory)
         except FileNotFoundError:
-            pass
+            logger.info("Did not find pipeline metadata in %s/pipeline.json" % working_directory)
 
     # 4) Devalidate stages
 
     # 4.1) Devalidate if they are required
     stale_names = set(required_names)
 
+    logger.info("Devalidating %d requested stages:" % len(stale_names))
+    for name in required_names: logger.info("- %s" % name)
+
     # 4.2) Devalidate if not in meta
-    stale_names |= set(sorted_names) - meta.keys()
+    partial_stages = set(sorted_names) - meta.keys()
+    stale_names |= partial_stages
+
+    logger.info("Devalidating %d stages without meta data:" % len(partial_stages))
+    for name in partial_stages: logger.info("- %s" % name)
 
     # 4.3) Devalidate if configuration values have changed
+    partial_config, partial_stages = {}, set()
+
     for name in sorted_names:
         if not name in stale_names and name in meta:
             for key, value in meta[name]["config"].items():
                 if not key in config or not config[key] == value:
                     stale_names.add(name)
 
+                    partial_config[key] = (value, config[key])
+                    partial_stages.add(name)
+
+    logger.info("Devalidating %d stages because config has changed ..." % len(partial_stages))
+    for name in partial_stages: logger.info("- %s" % name)
+    logger.info("... with the following values:")
+    for key, (v1, v2) in partial_config.items(): logger.info("- %s: %s -> %s" % (key, v1, v2))
+
     # 4.4) Devalidate if parent has been updated
+    partial_stages = {}
+
     for name in sorted_names:
         if not name in stale_names and name in meta:
             for parent_name, parent_update in meta[name]["parents"].items():
                 if not parent_name in meta:
                     stale_names.add(name)
+                    partial_stages[name] = parent_name
                 else:
                     if meta[parent_name]["updated"] > parent_update:
                         stale_names.add(name)
+                        partial_stages[name] = parent_name
+
+    logger.info("Devalidating %d stages because parent was updated:" % len(partial_stages))
+    for p in partial_stages.items(): logger.info("- %s (because of %s)" % p)
 
     # 4.5) Devalidate if parents are not the same anymore
     for name in sorted_names:
@@ -292,13 +329,25 @@ def run(definitions, config = {}, working_directory = None, verbose = False):
             if not name in dependencies:
                 if len(cached_names) > 0:
                     stale_names.add(name)
+                    partial_stages.add(name)
             elif not cached_names == set(dependencies[name]):
                 stale_names.add(name)
+                partial_stages.add(name)
+
+    logger.info("Devalidating %d stages because parents have changed:" % len(partial_stages))
+    for name in partial_stages: logger.info("- %s" % name)
 
     # 4.6) Devalidate descendants of devalidated stages
+    partial_stages = set()
+
     for name in set(stale_names):
         for descendant in nx.descendants(graph, name):
-            stale_names.add(descendant)
+            if not descendant in stale_names:
+                stale_names.add(descendant)
+                partial_stages.add(descendant)
+
+    logger.info("Devalidating %d stages because with stale ancestors:" % len(partial_stages))
+    for name in partial_stages: logger.info("- %s" % name)
 
     # 5) Reset meta information
     for name in stale_names:
@@ -309,12 +358,15 @@ def run(definitions, config = {}, working_directory = None, verbose = False):
         with open("%s/pipeline.json" % working_directory, "w+") as f:
             json.dump(meta, f)
 
+    logger.info("Successfully reset meta data")
+
     # 6) Execute stages
     results = [None] * len(definitions)
     cache = {}
 
     for name in sorted_names:
         if name in stale_names:
+            logger.info("Executing stage %s ..." % name)
             stage = hashed_registry[name]
 
             # Load the dependencies, either from cache or from file
@@ -325,6 +377,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False):
                 else:
                     for child in dependencies[name]:
                         with open("%s/%s.p" % (working_directory, child), "rb") as f:
+                            logger.info("Loading cache for %s ..." % child)
                             stage_dependencies.append(pickle.load(f))
 
             context = StageContext(stage.configuration_context, stage_dependencies)
@@ -337,6 +390,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False):
                 cache[name] = result
             else:
                 with open("%s/%s.p" % (working_directory, name), "wb+") as f:
+                    logger.info("Writing cache for %s" % name)
                     pickle.dump(result, f)
 
             # Update meta information
@@ -345,17 +399,26 @@ def run(definitions, config = {}, working_directory = None, verbose = False):
                 "updated": datetime.datetime.utcnow().timestamp(),
                 "parents": {
                     parent: meta[parent]["updated"] for parent in dependencies[name]
-                } if name in dependencies else {}
+                } if name in dependencies else {},
+                "info": context.info_data
             }
 
             if not working_directory is None:
                 with open("%s/pipeline.json" % working_directory, "w+") as f:
                     json.dump(meta, f)
 
+            logger.info("Finished running %s." % name)
+
     if verbose:
+        info = {}
+
+        for name in sorted(meta.keys()):
+            info.update(meta[name]["info"])
+
         return {
             "results": results,
-            "stale": stale_names
+            "stale": stale_names,
+            "info": info
         }
     else:
         return results
