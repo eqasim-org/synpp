@@ -4,6 +4,7 @@ import hashlib, json
 import networkx as nx
 import pickle
 import datetime
+import shutil
 
 class NoDefaultValue:
     pass
@@ -283,7 +284,23 @@ def run(definitions, config = {}, working_directory = None, verbose = False):
                     if meta[parent_name]["updated"] > parent_update:
                         stale_names.add(name)
 
-    # 4) Reset meta information
+    # 4.5) Devalidate if parents are not the same anymore
+    for name in sorted_names:
+        if not name in stale_names and name in meta:
+            cached_names = meta[name]["parents"].keys()
+
+            if not name in dependencies:
+                if len(cached_names) > 0:
+                    stale_names.add(name)
+            elif not cached_names == set(dependencies[name]):
+                stale_names.add(name)
+
+    # 4.6) Devalidate descendants of devalidated stages
+    for name in set(stale_names):
+        for descendant in nx.descendants(graph, name):
+            stale_names.add(descendant)
+
+    # 5) Reset meta information
     for name in stale_names:
         if name in meta:
             del meta[name]
@@ -292,7 +309,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False):
         with open("%s/pipeline.json" % working_directory, "w+") as f:
             json.dump(meta, f)
 
-    # 5) Execute stages
+    # 6) Execute stages
     results = [None] * len(definitions)
     cache = {}
 
