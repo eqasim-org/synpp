@@ -9,6 +9,7 @@ import logging
 
 from .general import PipelineError
 from .parallel import ParallelMasterContext
+from .progress import ProgressContext
 
 class NoDefaultValue:
     pass
@@ -144,9 +145,11 @@ class ConfigurationContext:
                 self.aliases[alias] = definition
 
 class StageContext:
-    def __init__(self, configuration_context, dependencies):
+    def __init__(self, configuration_context, dependencies, pipeline_config, logger):
         self.configuration_context = configuration_context
         self.dependencies = dependencies
+        self.pipeline_config = pipeline_config
+        self.logger = logger
         self.info_data = {}
 
     def parameter(self, name):
@@ -184,13 +187,22 @@ class StageContext:
         config = self.configuration_context.required_config
         parameters = self.configuration_context.required_parameters
 
+        if processes is None and "processes" in self.pipeline_config:
+            processes = self.pipeline_config["processes"]
+
         return ParallelMasterContext(data, config, parameters, processes)
 
-def run(definitions, config = {}, working_directory = None, verbose = False, logger = logging.getLogger("synpp")):
-    logger.setLevel(logging.WARNING)
+    def progress(self, iterable = None, label = None, total = None, minimum_interval = 1.0):
+        if minimum_interval is None and "progress_interval" in self.pipeline_config:
+            minimum_interval = self.pipeline_config["progress_interval"]
 
-    handler = logging.StreamHandler()
-    logger.addHandler(handler)
+        return ProgressContext(iterable, total, label, self.logger, minimum_interval)
+
+def run(definitions, config = {}, working_directory = None, verbose = False, logger = logging.getLogger("synpp")):
+    # 0) Construct pipeline config
+    pipeline_config = {}
+    if "processes" in config: pipeline_config["processes"] = config["processes"]
+    if "progress_interval" in config: pipeline_config["progress_interval"] = config["progress_interval"]
 
     # 1) Construct stage objects
     pending_definitions = definitions[:]
@@ -386,7 +398,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                             logger.info("Loading cache for %s ..." % child)
                             stage_dependencies.append(pickle.load(f))
 
-            context = StageContext(stage.configuration_context, stage_dependencies)
+            context = StageContext(stage.configuration_context, stage_dependencies, pipeline_config, logger)
             result = stage.execute(context)
 
             if name in required_names:

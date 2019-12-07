@@ -33,7 +33,6 @@ def test_parallel():
     assert 2001245 in result
     assert 3001245 in result
 
-
 def test_parallel_stage():
     result = synpp.run([
         { "descriptor": "tests.fixtures.parallel_stage" }
