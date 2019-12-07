@@ -7,10 +7,10 @@ import datetime
 import shutil
 import logging
 
-class NoDefaultValue:
-    pass
+from .general import PipelineError
+from .parallel import ParallelMasterContext
 
-class PipelineError(Exception):
+class NoDefaultValue:
     pass
 
 class StageInstance:
@@ -179,6 +179,12 @@ class StageContext:
 
     def info(self, name, value):
         self.info_data[name] = value
+
+    def parallel(self, data = {}, processes = None):
+        config = self.configuration_context.required_config
+        parameters = self.configuration_context.required_parameters
+
+        return ParallelMasterContext(data, config, parameters, processes)
 
 def run(definitions, config = {}, working_directory = None, verbose = False, logger = logging.getLogger("synpp")):
     logger.setLevel(logging.WARNING)
