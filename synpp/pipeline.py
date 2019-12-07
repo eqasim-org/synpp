@@ -6,6 +6,7 @@ import pickle
 import datetime
 import shutil
 import logging
+import os
 
 from .general import PipelineError
 from .parallel import ParallelMasterContext
@@ -154,8 +155,9 @@ class ConfigurationContext:
                 self.aliases[alias] = definition
 
 class ValidateContext:
-    def __init__(self, configuration_context):
+    def __init__(self, configuration_context, cache_path):
         self.configuration_context = configuration_context
+        self.cache_path = cache_path
 
     def parameter(self, name):
         if not name in self.configuration_context.required_parameters:
@@ -169,11 +171,16 @@ class ValidateContext:
 
         return self.configuration_context.required_config[name]
 
+    def path(self):
+        return self.cache_path
+
 class ExecuteContext:
-    def __init__(self, configuration_context, dependencies, pipeline_config, logger):
+    def __init__(self, configuration_context, dependencies, cache_path, dependency_paths, pipeline_config, logger):
         self.configuration_context = configuration_context
         self.dependencies = dependencies
         self.pipeline_config = pipeline_config
+        self.cache_path = cache_path
+        self.dependency_paths = dependency_paths
         self.logger = logger
         self.info_data = {}
 
@@ -204,6 +211,25 @@ class ExecuteContext:
             raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["parameters"]))
 
         return self.dependencies[self.configuration_context.required_stages.index(definition)]
+
+    def path(self, name = None, parameters = {}):
+        if name is None and len(parameters) == 0:
+            return self.cache_path
+
+        definition = {
+            "descriptor": name, "parameters": parameters
+        }
+
+        if name in self.configuration_context.aliases:
+            if len(parameters) > 0:
+                raise PipelineError("Cannot define parameters for aliased stage")
+
+            definition = self.configuration_context.aliases[name]
+
+        if not definition in self.configuration_context.required_stages:
+            raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["parameters"]))
+
+        return self.dependency_paths[self.configuration_context.required_stages.index(definition)]
 
     def info(self, name, value):
         self.info_data[name] = value
@@ -385,7 +411,8 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
 
     for name in sorted_names:
         stage = hashed_registry[name]
-        context = ValidateContext(stage.configuration_context)
+        cache_path = "%s/%s.cache" % (working_directory, name)
+        context = ValidateContext(stage.configuration_context, cache_path)
 
         validation_token = stage.validate(context)
         existing_token = meta[name]["validation_token"] if name in meta and "validation_token" in meta[name] else None
@@ -431,6 +458,8 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
 
             # Load the dependencies, either from cache or from file
             stage_dependencies = []
+            stage_dependency_paths = []
+
             if name in dependencies:
                 if working_directory is None:
                     stage_dependencies = [cache[parent] for parent in dependencies[name]]
@@ -439,10 +468,19 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                         with open("%s/%s.p" % (working_directory, child), "rb") as f:
                             logger.info("Loading cache for %s ..." % child)
                             stage_dependencies.append(pickle.load(f))
+                            stage_dependency_paths.append("%s/%s.cache" % (working_directory, child))
 
-            context = ExecuteContext(stage.configuration_context, stage_dependencies, pipeline_config, logger)
+            # Prepare cache path
+            cache_path = "%s/%s.cache" % (working_directory, name)
+
+            if not working_directory is None:
+                if os.path.exists(cache_path):
+                    shutil.rmtree(cache_path)
+                os.mkdir(cache_path)
+
+            context = ExecuteContext(stage.configuration_context, stage_dependencies, cache_path, stage_dependency_paths, pipeline_config, logger)
             result = stage.execute(context)
-            validation_token = stage.validate(ValidateContext(stage.configuration_context))
+            validation_token = stage.validate(ValidateContext(stage.configuration_context, cache_path))
 
             if name in required_names:
                 results[required_names.index(name)] = result
@@ -484,24 +522,3 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
         }
     else:
         return results
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#

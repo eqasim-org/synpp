@@ -41,3 +41,10 @@ def test_recursive(tmpdir):
     }], working_directory = tmpdir.mkdir("sub"))
 
     assert result[0] == 15
+
+def test_cache_path(tmpdir):
+    result = synpp.run([{
+        "descriptor": "tests.fixtures.cache_path_read"
+    }], working_directory = tmpdir.mkdir("sub"))
+
+    assert result[0] == "abc_uvw"

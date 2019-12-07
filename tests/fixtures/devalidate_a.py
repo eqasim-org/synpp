@@ -1,5 +1,3 @@
-devalidate_stage_value = None
-
 def configure(context):
     context.config("path")
 
