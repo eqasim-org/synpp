@@ -26,6 +26,12 @@ class StageInstance:
         if hasattr(self.instance, "configure"):
             return self.instance.configure(context)
 
+    def validate(self, context):
+        if hasattr(self.instance, "validate"):
+            return self.instance.validate(context)
+
+        return None
+
     def execute(self, context):
         if hasattr(self.instance, "execute"):
             return self.instance.execute(context)
@@ -94,6 +100,9 @@ class ParameterizedStage:
     def execute(self, context):
         return self.instance.execute(context)
 
+    def validate(self, context):
+        return self.instance.validate(context)
+
 class ConfigurationContext:
     def __init__(self, base_config, base_parameters):
         self.base_config = base_config
@@ -144,7 +153,23 @@ class ConfigurationContext:
             if not alias is None:
                 self.aliases[alias] = definition
 
-class StageContext:
+class ValidateContext:
+    def __init__(self, configuration_context):
+        self.configuration_context = configuration_context
+
+    def parameter(self, name):
+        if not name in self.configuration_context.required_parameters:
+            raise PipelineError("Parameter %s is not requested" % name)
+
+        return self.configuration_context.required_parameters[name]
+
+    def config(self, name):
+        if not name in self.configuration_context.required_config:
+            raise PipelineError("Config option %s is not requested" % name)
+
+        return self.configuration_context.required_config[name]
+
+class ExecuteContext:
     def __init__(self, configuration_context, dependencies, pipeline_config, logger):
         self.configuration_context = configuration_context
         self.dependencies = dependencies
@@ -355,7 +380,24 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
     logger.info("Devalidating %d stages because parents have changed:" % len(partial_stages))
     for name in partial_stages: logger.info("- %s" % name)
 
-    # 4.6) Devalidate descendants of devalidated stages
+    # 4.6) Manually devalidate stages
+    partial_stages = set()
+
+    for name in sorted_names:
+        stage = hashed_registry[name]
+        context = ValidateContext(stage.configuration_context)
+
+        validation_token = stage.validate(context)
+        existing_token = meta[name]["validation_token"] if name in meta and "validation_token" in meta[name] else None
+
+        if not validation_token == existing_token:
+            stale_names.add(name)
+            partial_stages.add(name)
+
+    logger.info("Devalidating %d stages by user-defined validation" % len(partial_stages))
+    for name in partial_stages: logger.info("- %s" % name)
+
+    # 4.7) Devalidate descendants of devalidated stages
     partial_stages = set()
 
     for name in set(stale_names):
@@ -398,8 +440,9 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                             logger.info("Loading cache for %s ..." % child)
                             stage_dependencies.append(pickle.load(f))
 
-            context = StageContext(stage.configuration_context, stage_dependencies, pipeline_config, logger)
+            context = ExecuteContext(stage.configuration_context, stage_dependencies, pipeline_config, logger)
             result = stage.execute(context)
+            validation_token = stage.validate(ValidateContext(stage.configuration_context))
 
             if name in required_names:
                 results[required_names.index(name)] = result
@@ -418,7 +461,8 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                 "parents": {
                     parent: meta[parent]["updated"] for parent in dependencies[name]
                 } if name in dependencies else {},
-                "info": context.info_data
+                "info": context.info_data,
+                "validation_token": validation_token
             }
 
             if not working_directory is None:
