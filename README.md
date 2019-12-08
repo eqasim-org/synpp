@@ -163,10 +163,10 @@ be automated.
 
 Each *stage* has an additional `validate` step, which also receives the
 configuration options and the parameters. Its purpose is to return a hash
-value that represents the results of the *stage*. To learn about the concept
+value that represents the environment of the *stage*. To learn about the concept
 in general, search for "md5 hash", for instance. The idea is the following:
-After the `execute` step, the `validate` step is called and based on the
-results of `execute` it will return a certain value. Next time the pipeline
+After the `execute` step, the `validate` step is called and
+ it will return a certain value. Next time the pipeline
 is resolved the `validate` step is called during devalidation, i.e. before
 the stage is actually *executed*. If the return value of `validate` now differs
 from what it was before, the stage will be devalidated.
