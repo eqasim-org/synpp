@@ -289,8 +289,3 @@ def execute(context):
   for i in context.progress(range(100)):
     pass
 ```
-
-# TODO
-
-- Pass result to validate
-- Make info also retrievable info(stage, name) vs info(name, value)
