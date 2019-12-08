@@ -175,14 +175,16 @@ class ValidateContext:
         return self.cache_path
 
 class ExecuteContext:
-    def __init__(self, configuration_context, dependencies, cache_path, dependency_paths, pipeline_config, logger):
+    def __init__(self, configuration_context, working_directory, dependencies, cache_path, pipeline_config, logger, cache):
         self.configuration_context = configuration_context
+        self.working_directory = working_directory
         self.dependencies = dependencies
         self.pipeline_config = pipeline_config
         self.cache_path = cache_path
-        self.dependency_paths = dependency_paths
         self.logger = logger
         self.info_data = {}
+        self.dependency_cache = {}
+        self.cache = cache
 
     def parameter(self, name):
         if not name in self.configuration_context.required_parameters:
@@ -210,9 +212,22 @@ class ExecuteContext:
         if not definition in self.configuration_context.required_stages:
             raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["parameters"]))
 
-        return self.dependencies[self.configuration_context.required_stages.index(definition)]
+        dependency = self.dependencies[self.configuration_context.required_stages.index(definition)]
+
+        if self.working_directory is None:
+            return self.cache[dependency]
+        else:
+            if not dependency in self.dependency_cache:
+                with open("%s/%s.p" % (self.working_directory, dependency), "rb") as f:
+                    self.logger.info("Loading cache for %s ..." % dependency)
+                    self.dependency_cache[dependency] = pickle.load(f)
+
+            return self.dependency_cache[dependency]
 
     def path(self, name = None, parameters = {}):
+        if self.working_directory is None:
+            raise PipelineError("Cache paths don't work if no working directory was specified")
+
         if name is None and len(parameters) == 0:
             return self.cache_path
 
@@ -229,7 +244,8 @@ class ExecuteContext:
         if not definition in self.configuration_context.required_stages:
             raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["parameters"]))
 
-        return self.dependency_paths[self.configuration_context.required_stages.index(definition)]
+        dependency = self.dependencies[self.configuration_context.required_stages.index(definition)]
+        return "%s/%s.cache" % (self.working_directory, dependency)
 
     def info(self, name, value):
         self.info_data[name] = value
@@ -461,15 +477,8 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
             stage_dependency_paths = []
 
             if name in dependencies:
-                if working_directory is None:
-                    stage_dependencies = [cache[parent] for parent in dependencies[name]]
-                else:
-                    for child in dependencies[name]:
-                        with open("%s/%s.p" % (working_directory, child), "rb") as f:
-                            logger.info("Loading cache for %s ..." % child)
-                            stage_dependencies.append(pickle.load(f))
-                            stage_dependency_paths.append("%s/%s.cache" % (working_directory, child))
-
+                stage_dependencies = dependencies[name]
+            
             # Prepare cache path
             cache_path = "%s/%s.cache" % (working_directory, name)
 
@@ -478,7 +487,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                     shutil.rmtree(cache_path)
                 os.mkdir(cache_path)
 
-            context = ExecuteContext(stage.configuration_context, stage_dependencies, cache_path, stage_dependency_paths, pipeline_config, logger)
+            context = ExecuteContext(stage.configuration_context, working_directory, stage_dependencies, cache_path, pipeline_config, logger, cache)
             result = stage.execute(context)
             validation_token = stage.validate(ValidateContext(stage.configuration_context, cache_path))
 
