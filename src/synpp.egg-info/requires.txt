@@ -1,0 +1,4 @@
+networkx>=2.4
+
+[test]
+pytest>=5.3.1
