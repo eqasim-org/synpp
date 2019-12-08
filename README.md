@@ -288,10 +288,6 @@ def execute(context):
 
   for i in context.progress(range(100)):
     pass
-
-  # ...
-  value = context.get_info("dropped_samples", number_of_dropped_samples)
-  # ...
 ```
 
 # TODO
