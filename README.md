@@ -261,7 +261,7 @@ stage in question as a dependency):
 ```python
 def execute(context):
   # ...
-  value = context.get_info("dropped_samples", number_of_dropped_samples)
+  value = context.get_info("my.other.stage", "dropped_samples")
   # ...
 ```
 
