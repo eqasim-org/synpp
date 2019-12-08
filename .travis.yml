@@ -1,4 +1,4 @@
-language: python3
+language: python
 script:
   - pip install .
   - python3 -m pytest tests
