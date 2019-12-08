@@ -1,2 +1,2 @@
 def execute(context):
-    context.info("uvw", "789")
+    context.set_info("uvw", "789")

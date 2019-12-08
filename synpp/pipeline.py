@@ -175,16 +175,17 @@ class ValidateContext:
         return self.cache_path
 
 class ExecuteContext:
-    def __init__(self, configuration_context, working_directory, dependencies, cache_path, pipeline_config, logger, cache):
+    def __init__(self, configuration_context, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info):
         self.configuration_context = configuration_context
         self.working_directory = working_directory
         self.dependencies = dependencies
         self.pipeline_config = pipeline_config
         self.cache_path = cache_path
         self.logger = logger
-        self.info_data = {}
+        self.stage_info = {}
         self.dependency_cache = {}
         self.cache = cache
+        self.dependency_info = dependency_info
 
     def parameter(self, name):
         if not name in self.configuration_context.required_parameters:
@@ -199,20 +200,7 @@ class ExecuteContext:
         return self.configuration_context.required_config[name]
 
     def stage(self, name, parameters = {}):
-        definition = {
-            "descriptor": name, "parameters": parameters
-        }
-
-        if name in self.configuration_context.aliases:
-            if len(parameters) > 0:
-                raise PipelineError("Cannot define parameters for aliased stage")
-
-            definition = self.configuration_context.aliases[name]
-
-        if not definition in self.configuration_context.required_stages:
-            raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["parameters"]))
-
-        dependency = self.dependencies[self.configuration_context.required_stages.index(definition)]
+        dependency = self._get_dependency({ "descriptor": name, "parameters": parameters })
 
         if self.working_directory is None:
             return self.cache[dependency]
@@ -231,24 +219,19 @@ class ExecuteContext:
         if name is None and len(parameters) == 0:
             return self.cache_path
 
-        definition = {
-            "descriptor": name, "parameters": parameters
-        }
-
-        if name in self.configuration_context.aliases:
-            if len(parameters) > 0:
-                raise PipelineError("Cannot define parameters for aliased stage")
-
-            definition = self.configuration_context.aliases[name]
-
-        if not definition in self.configuration_context.required_stages:
-            raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["parameters"]))
-
-        dependency = self.dependencies[self.configuration_context.required_stages.index(definition)]
+        dependency = self._get_dependency({ "descriptor": name, "parameters": parameters })
         return "%s/%s.cache" % (self.working_directory, dependency)
 
-    def info(self, name, value):
-        self.info_data[name] = value
+    def set_info(self, name, value):
+        self.stage_info[name] = value
+
+    def get_info(self, stage, name, parameters = {}):
+        dependency = self._get_dependency({ "descriptor": stage, "parameters": parameters })
+
+        if not name in self.dependency_info[dependency]:
+            raise PipelineError("No info '%s' available for %s" % (name, dependency))
+
+        return self.dependency_info[dependency][name]
 
     def parallel(self, data = {}, processes = None):
         config = self.configuration_context.required_config
@@ -264,6 +247,18 @@ class ExecuteContext:
             minimum_interval = self.pipeline_config["progress_interval"]
 
         return ProgressContext(iterable, total, label, self.logger, minimum_interval)
+
+    def _get_dependency(self, definition):
+        if definition["descriptor"] in self.configuration_context.aliases:
+            if len(definition["parameters"]) > 0:
+                raise PipelineError("Cannot define parameters for aliased stage")
+
+            definition = self.configuration_context.aliases[definition["descriptor"]]
+
+        if not definition in self.configuration_context.required_stages:
+            raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["parameters"]))
+
+        return self.dependencies[self.configuration_context.required_stages.index(definition)]
 
 def run(definitions, config = {}, working_directory = None, verbose = False, logger = logging.getLogger("synpp")):
     # 0) Construct pipeline config
@@ -474,11 +469,14 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
 
             # Load the dependencies, either from cache or from file
             stage_dependencies = []
-            stage_dependency_paths = []
+            stage_dependency_info = {}
 
             if name in dependencies:
                 stage_dependencies = dependencies[name]
-            
+
+                for parent in stage_dependencies:
+                    stage_dependency_info[parent] = meta[parent]["info"]
+
             # Prepare cache path
             cache_path = "%s/%s.cache" % (working_directory, name)
 
@@ -487,7 +485,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                     shutil.rmtree(cache_path)
                 os.mkdir(cache_path)
 
-            context = ExecuteContext(stage.configuration_context, working_directory, stage_dependencies, cache_path, pipeline_config, logger, cache)
+            context = ExecuteContext(stage.configuration_context, working_directory, stage_dependencies, cache_path, pipeline_config, logger, cache, stage_dependency_info)
             result = stage.execute(context)
             validation_token = stage.validate(ValidateContext(stage.configuration_context, cache_path))
 
@@ -508,7 +506,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                 "parents": {
                     parent: meta[parent]["updated"] for parent in dependencies[name]
                 } if name in dependencies else {},
-                "info": context.info_data,
+                "info": context.stage_info,
                 "validation_token": validation_token
             }
 

@@ -12,6 +12,7 @@ def test_info(tmpdir):
     assert "tests.fixtures.info2" in result["stale"]
     assert result["info"]["abc"] == "123"
     assert result["info"]["uvw"] == "789"
+    assert result["info"]["concat"] == "123789"
 
     result = synpp.run([
         { "descriptor": "tests.fixtures.info2" }
@@ -21,3 +22,4 @@ def test_info(tmpdir):
     assert "tests.fixtures.info2" in result["stale"]
     assert result["info"]["abc"] == "123"
     assert result["info"]["uvw"] == "789"
+    assert result["info"]["concat"] == "123789"
