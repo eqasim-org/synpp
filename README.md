@@ -1,5 +1,7 @@
 # Synthetic Population Pipeline (synpp)
 
+[![Build Status](https://travis-ci.org/eqasim-org/synpp.svg?branch=develop)](https://travis-ci.org/eqasim-org/synpp)
+
 The *synpp* module is a tool to chain different stages of a (population)
 synthesis pipeline. This means that self-contained pieces of code can be
 run, which are dependent on the outputs of other self-contained pieces
