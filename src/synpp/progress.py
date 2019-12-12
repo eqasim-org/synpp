@@ -34,7 +34,9 @@ class ProgressContext:
         self.start_value = value
         self.current_value = value
         self.last_report = time.time() - 1
-        self.total = total
+
+        if not self.total is None:
+            self.total = total
 
     def set(self, value):
         self.current_value = value
