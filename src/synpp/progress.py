@@ -29,11 +29,12 @@ class ProgressContext:
 
         self.reset(0)
 
-    def reset(self, value = 0):
+    def reset(self, value = 0, total = None):
         self.start_time = time.time()
         self.start_value = value
         self.current_value = value
         self.last_report = time.time() - 1
+        self.total = total
 
     def set(self, value):
         self.current_value = value
