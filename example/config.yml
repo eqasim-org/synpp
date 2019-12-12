@@ -1,0 +1,12 @@
+# General pipeline settings
+working_directory: /path/to/my/working_directory
+
+# Requested stages
+run:
+  - nyc_taxi.print_occupancy
+
+# These are configuration options that we use in the pipeline
+config:
+  years: [2018]
+  months: [1, 2, 3]
+  base_url: https://s3.amazonaws.com/nyc-tlc/trip+data
