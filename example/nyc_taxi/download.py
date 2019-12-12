@@ -1,6 +1,13 @@
 from urllib.request import urlretrieve
 import pandas as pd
 
+"""
+This stage downloads NYC taxi data sets. It is parameterized with a year and
+a month, because this data set comes in chunks. Each call of the stage with
+a certain combination of (year, month) downloads the respective data set and
+returns it as a pandas data frame.
+"""
+
 def configure(context):
     context.parameter("year")
     context.parameter("month")
@@ -9,6 +16,7 @@ def configure(context):
 def execute(context):
     # The taxi data can be retrieved from, e.g.
     #    https://s3.amazonaws.com/nyc-tlc/trip+data/yellow_tripdata_2018-01.csv
+    # The base URL can be configured through the configuration options.
 
     url = "%s/yellow_tripdata_%d-%02d.csv" % (
         context.config("base_url"),
@@ -25,6 +33,10 @@ def execute(context):
     return pd.read_csv("%s/data.csv" % context.path())
 
 class DownloadProgress:
+    """
+    Little helper class that makes us use the progress indicator with the
+    callback function of the urlretrieve function.
+    """
     def __init__(self, progress):
         self.progress = progress
         self.initialized = False

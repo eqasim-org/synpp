@@ -1,10 +1,11 @@
 # General pipeline settings
-working_directory: /home/shoerl/my_working_directory
+working_directory: /path/to/my/working_directory
 
 # Requested stages
 run:
-  - nyc_taxi.show
+  - nyc_taxi.print_occupancy
 
+# These are configuration options that we use in the pipeline
 config:
   years: [2018]
   months: [1, 2, 3]
