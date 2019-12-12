@@ -7,6 +7,7 @@ import datetime
 import shutil
 import logging
 import os
+import yaml
 
 from .general import PipelineError
 from .parallel import ParallelMasterContext
@@ -265,6 +266,10 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
     pipeline_config = {}
     if "processes" in config: pipeline_config["processes"] = config["processes"]
     if "progress_interval" in config: pipeline_config["progress_interval"] = config["progress_interval"]
+
+    if not working_directory is None:
+        if not os.path.isdir(working_directory):
+            raise PipelineError("Working directory does not exist: %s" % working_directory)
 
     # 1) Construct stage objects
     pending_definitions = definitions[:]
@@ -529,3 +534,26 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
         }
     else:
         return results
+
+def run_from_yaml(path):
+    with open(path) as f:
+        settings = yaml.load(f, Loader = yaml.SafeLoader)
+
+    definitions = []
+
+    for item in settings["run"]:
+        parameters = {}
+
+        if type(item) == dict:
+            key = list(item.keys())[0]
+            parameters = item[key]
+            item = key
+
+        definitions.append({
+            "descriptor": item, "parameters": parameters
+        })
+
+    config = settings["config"] if "config" in settings else {}
+    working_directory = settings["working_directory"] if "working_directory" in settings else None
+
+    run(definitions, config, working_directory)

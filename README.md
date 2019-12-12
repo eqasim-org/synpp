@@ -7,6 +7,24 @@ synthesis pipeline. This means that self-contained pieces of code can be
 run, which are dependent on the outputs of other self-contained pieces
 of code. Those pieces, or steps, are called *stages* in this module.
 
+The following will describe the components of the pipeline and how it can
+be set up and configured. Scroll to the bottom to find a full example of such
+a pipeline which automatically downloads NYC taxi data sets, merges them together
+and calculates the average vehicle occupancy during a predefined period.
+
+## Installation
+
+Currently, `synpp` is not available on the Python Package Index. To install the
+pipeline please clone the repository and execute
+
+```
+pip install .
+```
+
+inside of the directory.
+
+## Concepts
+
 A typical chain of stages could, for instance, be: **(C1)** load raw census data,
 **(C2)** clean raw census data *(dependent on C1)*, **(H1)** load raw household travel survey data,
 **(H2)** clean survey data *(dependent on C2)*, **(P1)** merge census *(C1)* and survey *(H2)* data,
@@ -32,7 +50,7 @@ def validate(context):
   pass
 ```
 
-## Configuration and Parameterization
+### Configuration and Parameterization
 
 Whenever the pipeline explores a stage, *configure* is called first. Note that
 in the example above we use a Python module, but the same procedure would work
@@ -75,7 +93,7 @@ def configure(context):
 Configuration options are defined initially by the pipeline as will be shown
 further below.
 
-## Execution
+### Execution
 
 The requested configuration values, parameters and stages are afterwards available
 to the `execute` step of a *stage*. There those values can be used to do the
@@ -109,7 +127,7 @@ whole pipeline, but only a fraction. The *synpp* framework has intelligent
 explorations algorithms included which figure out automatically, which
 *stages* need to be re-run.
 
-## Running a pipeline
+### Running a pipeline
 
 A pipeline can be started using the `synpp.run` method. A typical run would
 look like this:
@@ -161,7 +179,7 @@ The only measure that may be important to enforce 'by convention' is to
 *always run a stage after the code has been modified*. Though even this can
 be automated.
 
-## Validation
+### Validation
 
 Each *stage* has an additional `validate` step, which also receives the
 configuration options and the parameters. Its purpose is to return a hash
@@ -192,7 +210,7 @@ def execute(context):
   pass # Do something with the file
 ```
 
-## Cache paths
+### Cache paths
 
 Sometimes, results of a *stage* are not easily representable in Python. Even
 more, stages may call Java or Shell scripts which simply generate an output
@@ -216,7 +234,7 @@ have been defined as dependencies before. Note that the pipeline cannot enforce
 that one stage is not corrupting the cache path of another stage. Therefore,
 by convention, a stage should never *write* to the cache path of another stage.
 
-## Parallel execution
+### Parallel execution
 
 The *synpp* package comes with some simplified ways of parallelizing code,
 which are built on top of the `multiprocessing` package. To set up a parallel
@@ -242,7 +260,7 @@ flexible approach in `multiprocessing`. Otherwise, the `parallel` object
 provides most of the functionality of `Pool`, like, `map`, `async_map`,
 `imap`, and `unordered_imap`.
 
-## Info
+### Info
 
 While running the pipeline a lot of additional information may be interesting,
 like how many samples of a data set have been discarded in a certain stage. However,
@@ -270,7 +288,7 @@ def execute(context):
 Note that the *info* functionality should only be used for light-weight
 information like integers, short strings, etc.
 
-## Progress
+### Progress
 
 The *synpp* package provides functionality to show the progress of a stage
 similar to `tqdm`. However, `tqdm` tends to spam the console output which is
@@ -291,3 +309,78 @@ def execute(context):
   for i in context.progress(range(100)):
     pass
 ```
+
+### Command-line tool
+
+The `synpp` pipeline comes with a command line tool, which can be called like
+
+```sh
+python3 -m synpp [config_path]
+```
+
+If not config path is given, it will assume `config.yml`. This file should
+contain everything to run a pipeline. A simple version would look like this:
+
+```yaml
+# General pipeline settings
+working_directory: /path/to/my/working_directory
+
+# Requested stages
+run:
+  - my_first_module.my_first_stage
+  - my_first_parameterized_stage:
+    param1: 123
+    param2: 345
+
+# These are configuration options that are used in the pipeline
+config:
+  my_option: 123
+```
+
+It receives the working directory, a list of stages (which may be parameterized)
+and all configuration options. The stages listed above should be available
+as Python modules or classes.
+
+## NYC Taxi Example
+
+This repository contains an example of the pipline. To run it, you will need
+`pandas` as an additional Python dependency. For testing, you can clone this
+repository to any directory on your machine. Inside the repository directory
+you can find the `example` directory. If you did not install `synpp` yet,
+you can do this by executing
+
+```sh
+pip install .
+```
+
+inside of the repository directory. Afterwards, open `examples/config.yml`
+and adjust the `working_directory` path. This is a path that should exist on
+your machine and it should be empty. The best is if you simply create a new
+folder and add the path in `config.yml`.
+
+You can now go to `examples` and call the pipeline code:
+
+```sh
+cd examples
+python3 -m synpp
+```
+
+It will automatically discover `config.yml` (but you could path a different
+config file path manually as a command line argument). It will then download
+the NYC taxi data for January, February and March 2018 (see configuration
+options in `config.yml`). Note that this is happening in one stage for which
+you can find the code in `nyc_taxi.download`. It is parameterized by a month
+and a year to download the respective data set. These data sets then go into
+`nyc_taxi.aggregate`, where they are merged together. Finally, an average
+occupancy value is printed out in `nyc_taxi.print_occupancy`. So the dependency
+structure is as follows:
+
+```
+nyc_taxi.aggregate depends on multiple nyc_taxi.download(year, month)
+nyc_taxi.print_occupancy depends on nyc_taxi.aggregate
+```
+
+After one successful run of the pipeline you can start it again. You will notice
+that the pipeline does *not* download the data again, because nothing has changed
+for those stages. However, if you would change the requested months in `config.yml`
+the pipeline may download the additional data sets.
