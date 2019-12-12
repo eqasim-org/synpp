@@ -22,5 +22,14 @@ setup(
     install_requires = ["networkx>=2.4", "PyYAML>=5.1.2"],
     extras_require = {
         "test": ["pytest>=5.3.1"], "example": ["pandas>=0.25.3"]
-    }
+    },
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Environment :: Console",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+        "Topic :: Scientific/Engineering",
+    ],
 )
