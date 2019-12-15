@@ -188,6 +188,8 @@ class ExecuteContext:
         self.cache = cache
         self.dependency_info = dependency_info
 
+        self.progress_context = None
+
     def parameter(self, name):
         if not name in self.configuration_context.required_parameters:
             raise PipelineError("Parameter %s is not requested" % name)
@@ -241,13 +243,14 @@ class ExecuteContext:
         if processes is None and "processes" in self.pipeline_config:
             processes = self.pipeline_config["processes"]
 
-        return ParallelMasterContext(data, config, parameters, processes)
+        return ParallelMasterContext(data, config, parameters, processes, self.progress_context)
 
     def progress(self, iterable = None, label = None, total = None, minimum_interval = 1.0):
         if minimum_interval is None and "progress_interval" in self.pipeline_config:
             minimum_interval = self.pipeline_config["progress_interval"]
 
-        return ProgressContext(iterable, total, label, self.logger, minimum_interval)
+        self.progress_context = ProgressContext(iterable, total, label, self.logger, minimum_interval)
+        return self.progress_context
 
     def _get_dependency(self, definition):
         if definition["descriptor"] in self.configuration_context.aliases:
