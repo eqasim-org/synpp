@@ -11,22 +11,22 @@ def test_parallel():
 
     arguments = [1000000, 2000000, 3000000]
 
-    with ParallelMasterContext(data, config, parameters, 3) as parallel:
+    with ParallelMasterContext(data, config, parameters, 3, None) as parallel:
         result = parallel.map(sum_up, arguments)
 
     assert result == [1001245, 2001245, 3001245]
 
-    with ParallelMasterContext(data, config, parameters, 3) as parallel:
+    with ParallelMasterContext(data, config, parameters, 3, None) as parallel:
         result = parallel.map_async(sum_up, arguments).get()
 
     assert result == [1001245, 2001245, 3001245]
 
-    with ParallelMasterContext(data, config, parameters, 3) as parallel:
+    with ParallelMasterContext(data, config, parameters, 3, None) as parallel:
         result = list(parallel.imap(sum_up, arguments))
 
     assert result == [1001245, 2001245, 3001245]
 
-    with ParallelMasterContext(data, config, parameters, 3) as parallel:
+    with ParallelMasterContext(data, config, parameters, 3, None) as parallel:
         result = list(parallel.imap_unordered(sum_up, arguments))
 
     assert 1001245 in result

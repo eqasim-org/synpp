@@ -1,11 +1,15 @@
 import multiprocessing as mp
 from .general import PipelineParallelError
+from .progress import ProgressClient
 
 class ParallelSlaveContext:
-    def __init__(self, data, config, parameters):
+    def __init__(self, data, config, parameters, progress_port = None):
         self._config = config
         self._parameters = parameters
         self._data = data
+
+        if not progress_port is None:
+            self.progress = ProgressClient(progress_port)
 
     def config(self, option):
         if not option in self._config:
@@ -31,9 +35,9 @@ class ParallelSlaveContext:
     def parallel(self, *kargs, **kwargs):
         raise PipelineParallelError("Cannot spawn new parallel processes from a parallel process")
 
-def pipeline_initializer(pipeline_data, pipeline_config, pipeline_parameters):
+def pipeline_initializer(pipeline_data, pipeline_config, pipeline_parameters, pipeline_progress_port):
     global pipeline_parallel_context
-    pipeline_parallel_context = ParallelSlaveContext(pipeline_data, pipeline_config, pipeline_parameters)
+    pipeline_parallel_context = ParallelSlaveContext(pipeline_data, pipeline_config, pipeline_parameters, pipeline_progress_port)
 
 def pipeline_runner(args):
     global pipeline_parallel_context
@@ -50,23 +54,30 @@ class wrap_callable:
             yield (self.callable, element)
 
 class ParallelMasterContext:
-    def __init__(self, data, config, parameters, processes):
+    def __init__(self, data, config, parameters, processes, progress_context):
         if processes is None: processes = mp.cpu_count()
-        
+
         self.processes = processes
         self.config = config
         self.parameters = parameters
         self.data = data
         self.pool = None
 
+        self.progress_context = progress_context
+
     def __enter__(self):
         if not self.pool is None:
             raise PipelineParallelError("Parallel context has already been entered")
 
+        progress_port = None
+        if not self.progress_context is None:
+            if not self.progress_context.server is None:
+                progress_port = self.progress_context.server.port
+
         self.pool = mp.Pool(
             processes = self.processes,
             initializer = pipeline_initializer,
-            initargs = (self.data, self.config, self.parameters)
+            initargs = (self.data, self.config, self.parameters, progress_port)
         )
 
         return self

@@ -8,7 +8,7 @@ with open(path.join(here, "README.md"), encoding = "utf-8") as f:
 
 setup(
     name = "synpp",
-    version = "1.0.0",
+    version = "1.0.1-dev",
     description = "Synthetic population pipeline package for eqasim",
     long_description = long_description,
     long_description_content_type = "text/markdown",
@@ -19,8 +19,17 @@ setup(
     package_dir = { "": "src" },
     packages = find_packages(where = "src"),
     python_requires='>=3.0',
-    install_requires = ["networkx>=2.4", "PyYAML>=5.1.2"],
+    install_requires = ["networkx>=2.4", "PyYAML>=5.1.2", "pyzmq>=18.1.0"],
     extras_require = {
         "test": ["pytest>=5.3.1"], "example": ["pandas>=0.25.3"]
-    }
+    },
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Environment :: Console",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3",
+        "Topic :: Scientific/Engineering",
+    ],
 )
