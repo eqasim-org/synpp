@@ -3,9 +3,8 @@ from .general import PipelineParallelError
 from .progress import ProgressClient
 
 class ParallelSlaveContext:
-    def __init__(self, data, config, parameters, progress_port = None):
+    def __init__(self, data, config, progress_port = None):
         self._config = config
-        self._parameters = parameters
         self._data = data
 
         if not progress_port is None:
@@ -16,12 +15,6 @@ class ParallelSlaveContext:
             raise PipelineError("Config option is not available: %s" % option)
 
         return self._config[option]
-
-    def parameter(self, name):
-        if not name in self._parameters:
-            raise PipelineError("Config option is not available: %s" % name)
-
-        return self._parameters[name]
 
     def data(self, name):
         if not name in self._data:
@@ -35,9 +28,9 @@ class ParallelSlaveContext:
     def parallel(self, *kargs, **kwargs):
         raise PipelineParallelError("Cannot spawn new parallel processes from a parallel process")
 
-def pipeline_initializer(pipeline_data, pipeline_config, pipeline_parameters, pipeline_progress_port):
+def pipeline_initializer(pipeline_data, pipeline_config, pipeline_progress_port):
     global pipeline_parallel_context
-    pipeline_parallel_context = ParallelSlaveContext(pipeline_data, pipeline_config, pipeline_parameters, pipeline_progress_port)
+    pipeline_parallel_context = ParallelSlaveContext(pipeline_data, pipeline_config, pipeline_progress_port)
 
 def pipeline_runner(args):
     global pipeline_parallel_context
@@ -54,12 +47,11 @@ class wrap_callable:
             yield (self.callable, element)
 
 class ParallelMasterContext:
-    def __init__(self, data, config, parameters, processes, progress_context):
+    def __init__(self, data, config, processes, progress_context):
         if processes is None: processes = mp.cpu_count()
 
         self.processes = processes
         self.config = config
-        self.parameters = parameters
         self.data = data
         self.pool = None
 
@@ -77,7 +69,7 @@ class ParallelMasterContext:
         self.pool = mp.Pool(
             processes = self.processes,
             initializer = pipeline_initializer,
-            initargs = (self.data, self.config, self.parameters, progress_port)
+            initargs = (self.data, self.config, progress_port)
         )
 
         return self
