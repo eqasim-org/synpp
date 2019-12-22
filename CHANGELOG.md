@@ -1,6 +1,10 @@
 # CHANGELOG
 
-**1.0.1-dev**
+**1.0.2-dev**
+
+- No changes yet
+
+**1.0.1**
 
 - Add functionality for parallel progress
 - Fix total value for progress
