@@ -5,7 +5,7 @@ import os
 import logging
 
 if __name__ == "__main__":
-    logging.basicConfig(level = logging.DEBUG)
+    logging.basicConfig(level = logging.INFO)
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yml"
 
     if not os.path.isfile(config_path):

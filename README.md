@@ -14,14 +14,21 @@ and calculates the average vehicle occupancy during a predefined period.
 
 ## Installation
 
-Currently, `synpp` is not available on the Python Package Index. To install the
-pipeline please clone the repository and execute
+The `synpp` package releases can be installed via `pip`:
+
+```sh
+pip install synpp
+```
+
+Currently, version `1.0.1` is the active release version. Alternatively, you can
+clone the `develop` branch of this repository to use the development version `1.0.2-dev`.
+It can be installed by calling
 
 ```
 pip install .
 ```
 
-inside of the directory.
+inside of the repository directoy.
 
 ## Concepts
 
