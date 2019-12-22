@@ -1,8 +1,12 @@
 # CHANGELOG
 
-**1.0.2-dev**
+**1.0.0-dev**
 
 - No changes yet
+
+**1.1.0**
+
+- BC: Remove "parameter" functionality and unify "config" concept
 
 **1.0.1**
 

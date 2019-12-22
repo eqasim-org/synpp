@@ -8,6 +8,7 @@ import shutil
 import logging
 import os
 import yaml
+import copy
 
 from .general import PipelineError
 from .parallel import ParallelMasterContext
@@ -62,39 +63,39 @@ def resolve_stage(descriptor):
     clazz = descriptor.__class__
     return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__))
 
-def parameterize_stage(instance, context, parameters):
-    parameter_values = {}
+def configure_stage(instance, context, config):
+    config_values = {}
 
-    for name, default_value in context.required_parameters.items():
-        if name in parameters:
-            parameter_values[name] = parameters[name]
+    for name, default_value in context.required_config.items():
+        if name in config:
+            config_values[name] = config[name]
         elif not type(default_value) == NoDefaultValue:
-            parameter_values[name] = default_value
+            config_values[name] = default_value
         else:
-            raise PipelineError("Parameter '%s' missing for stage '%s'" % (name, instance.name))
+            raise PipelineError("Config option '%s' missing for stage '%s'" % (name, instance.name))
 
-    return ParameterizedStage(instance, parameters, context)
+    return ConfiguredStage(instance, config, context)
 
-def parameterize_name(name, parameters):
-    values = ["%s=%s" % (name, value) for name, value in parameters.items()]
+def configure_name(name, config):
+    values = ["%s=%s" % (name, value) for name, value in config.items()]
     return "%s(%s)" % (name, ",".join(values))
 
-def hash_name(name, parameters):
-    if len(parameters) > 0:
+def hash_name(name, config):
+    if len(config) > 0:
         hash = hashlib.md5()
-        hash.update(json.dumps(parameters, sort_keys = True).encode("ascii"))
+        hash.update(json.dumps(config, sort_keys = True).encode("ascii"))
         return "%s__%s" % (name, hash.hexdigest())
     else:
         return name
 
-class ParameterizedStage:
-    def __init__(self, instance, parameters, configuration_context):
+class ConfiguredStage:
+    def __init__(self, instance, config, configuration_context):
         self.instance = instance
-        self.parameters = parameters
+        self.config = config
         self.configuration_context = configuration_context
 
-        self.parameterized_name = parameterize_name(instance.name, parameters)
-        self.hashed_name = hash_name(instance.name, parameters)
+        self.configured_name = configure_name(instance.name, configuration_context.required_config)
+        self.hashed_name = hash_name(instance.name, configuration_context.required_config)
 
     def configure(self, context):
         return self.instance.configure(context)
@@ -106,12 +107,10 @@ class ParameterizedStage:
         return self.instance.validate(context)
 
 class ConfigurationContext:
-    def __init__(self, base_config, base_parameters):
+    def __init__(self, base_config):
         self.base_config = base_config
-        self.base_parameters = base_parameters
 
         self.required_config = {}
-        self.required_parameters = {}
 
         self.required_stages = []
         self.aliases = {}
@@ -130,23 +129,9 @@ class ConfigurationContext:
 
         return self.required_config[option]
 
-    def parameter(self, name, default = NoDefaultValue()):
-        if name in self.base_parameters:
-            self.required_parameters[name] = self.base_parameters[name]
-        elif not isinstance(default, NoDefaultValue):
-            if name in self.required_parameters and not self.required_parameters[name] == default:
-                raise PipelineError("Got multiple default values for parameter: %s" % name)
-
-            self.required_parameters[name] = default
-
-        if not name in self.required_parameters:
-            raise PipelineError("Config option is not available: %s" % name)
-
-        return self.required_parameters[name]
-
-    def stage(self, descriptor, parameters = {}, alias = None):
+    def stage(self, descriptor, config = {}, alias = None):
         definition = {
-            "descriptor": descriptor, "parameters": parameters
+            "descriptor": descriptor, "config": config
         }
 
         if not definition in self.required_stages:
@@ -159,12 +144,6 @@ class ValidateContext:
     def __init__(self, configuration_context, cache_path):
         self.configuration_context = configuration_context
         self.cache_path = cache_path
-
-    def parameter(self, name):
-        if not name in self.configuration_context.required_parameters:
-            raise PipelineError("Parameter %s is not requested" % name)
-
-        return self.configuration_context.required_parameters[name]
 
     def config(self, name):
         if not name in self.configuration_context.required_config:
@@ -190,20 +169,14 @@ class ExecuteContext:
 
         self.progress_context = None
 
-    def parameter(self, name):
-        if not name in self.configuration_context.required_parameters:
-            raise PipelineError("Parameter %s is not requested" % name)
-
-        return self.configuration_context.required_parameters[name]
-
     def config(self, name):
         if not name in self.configuration_context.required_config:
             raise PipelineError("Config option %s is not requested" % name)
 
         return self.configuration_context.required_config[name]
 
-    def stage(self, name, parameters = {}):
-        dependency = self._get_dependency({ "descriptor": name, "parameters": parameters })
+    def stage(self, name, config = {}):
+        dependency = self._get_dependency({ "descriptor": name, "config": config })
 
         if self.working_directory is None:
             return self.cache[dependency]
@@ -215,21 +188,21 @@ class ExecuteContext:
 
             return self.dependency_cache[dependency]
 
-    def path(self, name = None, parameters = {}):
+    def path(self, name = None, config = {}):
         if self.working_directory is None:
             raise PipelineError("Cache paths don't work if no working directory was specified")
 
-        if name is None and len(parameters) == 0:
+        if name is None and len(config) == 0:
             return self.cache_path
 
-        dependency = self._get_dependency({ "descriptor": name, "parameters": parameters })
+        dependency = self._get_dependency({ "descriptor": name, "config": config })
         return "%s/%s.cache" % (self.working_directory, dependency)
 
     def set_info(self, name, value):
         self.stage_info[name] = value
 
-    def get_info(self, stage, name, parameters = {}):
-        dependency = self._get_dependency({ "descriptor": stage, "parameters": parameters })
+    def get_info(self, stage, name, config = {}):
+        dependency = self._get_dependency({ "descriptor": stage, "config": config })
 
         if not name in self.dependency_info[dependency]:
             raise PipelineError("No info '%s' available for %s" % (name, dependency))
@@ -238,12 +211,11 @@ class ExecuteContext:
 
     def parallel(self, data = {}, processes = None):
         config = self.configuration_context.required_config
-        parameters = self.configuration_context.required_parameters
 
         if processes is None and "processes" in self.pipeline_config:
             processes = self.pipeline_config["processes"]
 
-        return ParallelMasterContext(data, config, parameters, processes, self.progress_context)
+        return ParallelMasterContext(data, config, processes, self.progress_context)
 
     def progress(self, iterable = None, label = None, total = None, minimum_interval = 1.0):
         if minimum_interval is None and "progress_interval" in self.pipeline_config:
@@ -254,13 +226,13 @@ class ExecuteContext:
 
     def _get_dependency(self, definition):
         if definition["descriptor"] in self.configuration_context.aliases:
-            if len(definition["parameters"]) > 0:
+            if len(definition["config"]) > 0:
                 raise PipelineError("Cannot define parameters for aliased stage")
 
             definition = self.configuration_context.aliases[definition["descriptor"]]
 
         if not definition in self.configuration_context.required_stages:
-            raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["parameters"]))
+            raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["config"]))
 
         return self.dependencies[self.configuration_context.required_stages.index(definition)]
 
@@ -277,7 +249,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
     # 1) Construct stage objects
     pending_definitions = definitions[:]
 
-    unparameterized_registry = {}
+    unconfigured_registry = {}
     hashed_registry = {}
     required_names = []
 
@@ -286,35 +258,39 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
 
     while len(pending_definitions) > 0:
         definition = pending_definitions.pop(0)
-        parameters = definition["parameters"] if "parameters" in definition else {}
+
+        stage_config = copy.copy(config)
+
+        if "config" in definition:
+            stage_config.update(definition["config"])
 
         # Resolve the underlying code of the stage
-        unparameterized_stage = resolve_stage(definition["descriptor"])
-        unparameterized_name = unparameterized_stage.name
+        unconfigured_stage = resolve_stage(definition["descriptor"])
+        unconfigured_name = unconfigured_stage.name
 
-        if not unparameterized_name in unparameterized_registry:
-            unparameterized_registry[unparameterized_name] = unparameterized_stage
+        if not unconfigured_name in unconfigured_registry:
+            unconfigured_registry[unconfigured_name] = unconfigured_stage
         else:
-            unparameterized_stage = unparameterized_registry[unparameterized_name]
+            unconfigured_stage = unconfigured_registry[unconfigured_name]
 
         # Call the configure method of the stage and obtain parameters
-        context = ConfigurationContext(config, parameters)
-        unparameterized_stage.configure(context)
+        context = ConfigurationContext(stage_config)
+        unconfigured_stage.configure(context)
 
-        # Create a parameterized version of the stage
-        parameterized_stage = parameterize_stage(unparameterized_stage, context, parameters)
-        hashed_name = parameterized_stage.hashed_name
+        # Create a configured version of the stage
+        configured_stage = configure_stage(unconfigured_stage, context, stage_config)
+        hashed_name = configured_stage.hashed_name
 
         if hashed_name in hashed_registry:
-            parameterized_stage = hashed_registry[hashed_name]
+            configured_stage = hashed_registry[hashed_name]
         else:
-            hashed_registry[hashed_name] = parameterized_stage
+            hashed_registry[hashed_name] = configured_stage
 
             # Go through dependencies
             for index, dependency in enumerate(context.required_stages):
                 pending_definitions.append({
                     "descriptor": dependency["descriptor"],
-                    "parameters": dependency["parameters"],
+                    "config": dependency["config"],
                     ":child": { "name": hashed_name, "index": index, "size": len(context.required_stages) }
                 })
 
@@ -344,7 +320,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
             graph.add_edge(parent_name, child_name)
 
     for cycle in nx.cycles.simple_cycles(graph):
-        cycle = [hashed_registry[item].parameterized_name for item in cycle]
+        cycle = [hashed_registry[item].configured_name for item in cycle]
         raise PipelineError("Found cycle: %s" % " -> ".join(cycle))
 
     sorted_names = list(nx.topological_sort(graph))

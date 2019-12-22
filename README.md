@@ -20,8 +20,8 @@ The `synpp` package releases can be installed via `pip`:
 pip install synpp
 ```
 
-Currently, version `1.0.1` is the active release version. Alternatively, you can
-clone the `develop` branch of this repository to use the development version `1.0.2-dev`.
+Currently, version `1.1.0` is the active release version. Alternatively, you can
+clone the `develop` branch of this repository to use the development version `1.1.0-dev`.
 It can be installed by calling
 
 ```
@@ -40,8 +40,7 @@ A typical chain of stages could, for instance, be: **(C1)** load raw census data
 In *synpp* each *stage* is defined by:
 
 * A *descriptor*, which can be a Python module, a class or a class instance, or a string referencing a module or class.
-* *Parameters* that are specific to each *stage*.
-* *Configuration options* that are specific to an entire pipeline
+* *Configuration options* that parameterize each *stage*.
 
 The most common form of a *stage* is a Python module. A full stage would look
 like this:
@@ -62,24 +61,24 @@ def validate(context):
 Whenever the pipeline explores a stage, *configure* is called first. Note that
 in the example above we use a Python module, but the same procedure would work
 analogously with a class. In *configure* one can the pipeline what the *stage*
-expects in terms of other input *stages* and in terms of *parameters* and
+expects in terms of other input *stages* and in terms of
 *configuration options*:
 
 ```python
 def configure(context):
-  # Expect a parameter and read the value passed to the stage
-  value = context.parameter("random_seed")
-
   # Expect an output directory
   value = context.config("output_path")
+
+  # Expect a random seed
+  value = context.config("random_seed")
 
   # Expect a certain stage (no return value)
   context.stage("my.pipeline.raw_data")
 ```
 
-We could add this stage (let's call it `my.pipeline.next`)
+We could add this stage (let's call it `my.pipeline.raw_data`)
 as a dependency to another one. However, as we did not define a default
-parameter with the `parameter` method, we need to explicitly set one, like so:
+value with the `config` method, we need to explicitly set one, like so:
 
 ```python
 def configure(context):
@@ -91,18 +90,20 @@ one stage definition:
 
 ```python
 def configure(context):
-  i = context.parameter("i")
+  i = context.config("i")
 
   if i > 0:
-    context.stage("this.stage", { "param": i - 1 })
+    context.stage("this.stage", { "i": i - 1 })
 ```
 
-Configuration options are defined initially by the pipeline as will be shown
-further below.
+Configuration options can also be defined globally in the pipeline. In case
+no default value is given for an option in `configure` and in case that no
+specific value is passed to the stage, a global configuration that is specific
+to the pipeline will be used to look up the value.
 
 ### Execution
 
-The requested configuration values, parameters and stages are afterwards available
+The requested configuration values and stages are afterwards available
 to the `execute` step of a *stage*. There those values can be used to do the
 "heavy work" of the stage. As the `configure` step already defined what kind
 of values to expect, we can be sure that those values and dependencies are
@@ -117,7 +118,6 @@ def execute(context):
   df["age"] = df["age"].astype(int)
 
   # We could access some values if we wanted
-  value = context.parameter("...")
   value = context.config("...")
 
   return df
@@ -145,7 +145,7 @@ working_directory = "~/pipeline/cache"
 
 synpp.run([
     { "descriptor": "my.pipeline.final_population" },
-    { "descriptor": "my.pipeline.paper_analysis", { "font_size": 12 } }
+    { "descriptor": "my.pipeline.paper_analysis", "config": { "font_size": 12 } }
 ], config = config, working_directory = working_directory)
 ```
 
