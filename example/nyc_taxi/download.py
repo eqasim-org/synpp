@@ -9,8 +9,8 @@ returns it as a pandas data frame.
 """
 
 def configure(context):
-    context.parameter("year")
-    context.parameter("month")
+    context.config("year")
+    context.config("month")
     context.config("base_url")
 
 def execute(context):
@@ -20,8 +20,8 @@ def execute(context):
 
     url = "%s/yellow_tripdata_%d-%02d.csv" % (
         context.config("base_url"),
-        context.parameter("year"),
-        context.parameter("month")
+        context.config("year"),
+        context.config("month")
     )
 
     # We download the file from the URL to data.csv in the cache path

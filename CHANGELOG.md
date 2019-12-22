@@ -2,7 +2,7 @@
 
 **1.0.2-dev**
 
-- No changes yet
+- BC: Remove "parameter" functionality and unify "config" concept
 
 **1.0.1**
 

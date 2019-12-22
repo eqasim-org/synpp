@@ -3,8 +3,8 @@ from pytest import raises
 
 def test_sum_params():
     result = synpp.run([{
-        "descriptor": "tests.fixtures.sum_params",
-        "parameters": { "a": 5, "b": 9 }
+        "descriptor": "tests.fixtures.sum_config",
+        "config": { "a": 5, "b": 9 }
     }])
     assert result[0] == 14
 
@@ -37,7 +37,7 @@ def test_sum_stages_with_files(tmpdir):
 def test_recursive(tmpdir):
     result = synpp.run([{
         "descriptor": "tests.fixtures.recursive",
-        "parameters": { "a": 5 }
+        "config": { "a": 5 }
     }], working_directory = tmpdir.mkdir("sub"))
 
     assert result[0] == 15
