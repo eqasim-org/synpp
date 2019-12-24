@@ -141,22 +141,22 @@ class ConfigurationContext:
                 self.aliases[alias] = definition
 
 class ValidateContext:
-    def __init__(self, configuration_context, cache_path):
-        self.configuration_context = configuration_context
+    def __init__(self, required_config, cache_path):
+        self.required_config = required_config
         self.cache_path = cache_path
 
-    def config(self, name):
-        if not name in self.configuration_context.required_config:
-            raise PipelineError("Config option %s is not requested" % name)
+    def config(self, option):
+        if not option in self.required_config:
+            raise PipelineError("Config option %s is not requested" % option)
 
-        return self.configuration_context.required_config[name]
+        return self.required_config[option]
 
     def path(self):
         return self.cache_path
 
 class ExecuteContext:
-    def __init__(self, configuration_context, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info):
-        self.configuration_context = configuration_context
+    def __init__(self, required_config, required_stages, aliases, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info):
+        self.required_config = required_config
         self.working_directory = working_directory
         self.dependencies = dependencies
         self.pipeline_config = pipeline_config
@@ -166,14 +166,16 @@ class ExecuteContext:
         self.dependency_cache = {}
         self.cache = cache
         self.dependency_info = dependency_info
+        self.aliases = aliases
+        self.required_stages = required_stages
 
         self.progress_context = None
 
-    def config(self, name):
-        if not name in self.configuration_context.required_config:
-            raise PipelineError("Config option %s is not requested" % name)
+    def config(self, option):
+        if not option in self.required_config:
+            raise PipelineError("Config option %s is not requested" % option)
 
-        return self.configuration_context.required_config[name]
+        return self.required_config[option]
 
     def stage(self, name, config = {}):
         dependency = self._get_dependency({ "descriptor": name, "config": config })
@@ -210,7 +212,7 @@ class ExecuteContext:
         return self.dependency_info[dependency][name]
 
     def parallel(self, data = {}, processes = None):
-        config = self.configuration_context.required_config
+        config = self.required_config
 
         if processes is None and "processes" in self.pipeline_config:
             processes = self.pipeline_config["processes"]
@@ -225,16 +227,166 @@ class ExecuteContext:
         return self.progress_context
 
     def _get_dependency(self, definition):
-        if definition["descriptor"] in self.configuration_context.aliases:
+        if definition["descriptor"] in self.aliases:
             if len(definition["config"]) > 0:
                 raise PipelineError("Cannot define parameters for aliased stage")
 
-            definition = self.configuration_context.aliases[definition["descriptor"]]
+            definition = self.aliases[definition["descriptor"]]
 
-        if not definition in self.configuration_context.required_stages:
+        if not definition in self.required_stages:
             raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["config"]))
 
-        return self.dependencies[self.configuration_context.required_stages.index(definition)]
+        return self.dependencies[self.required_stages.index(definition)]
+
+def process_stages(definitions, global_config):
+    pending = copy.copy(definitions)
+    stages = []
+
+    for index, stage in enumerate(pending):
+        stage["required-index"] = index
+
+    while len(pending) > 0:
+        definition = pending.pop(0)
+
+        # Resolve the underlying code of the stage
+        wrapper = resolve_stage(definition["descriptor"])
+
+        # Call the configure method of the stage and obtain parameters
+        config = copy.copy(global_config)
+
+        if "config" in definition:
+            config.update(definition["config"])
+
+        # Obtain configuration information through configuration context
+        context = ConfigurationContext(config)
+        wrapper.configure(context)
+
+        definition.update({
+            "wrapper": wrapper,
+            "config": copy.copy(context.required_config),
+            "required_config": copy.copy(context.required_config),
+            "required_stages": context.required_stages,
+            "aliases": context.aliases
+        })
+
+        # Check for cycles
+        cycle_hash = hash_name(definition["wrapper"].name, definition["config"])
+
+        if "cycle_hashes" in definition and cycle_hash in definition["cycle_hashes"]:
+            raise PipelineError("Found cycle in dependencies: %s" % definition["wrapper"].name)
+
+        # Everything fine, add it
+        stages.append(definition)
+        stage_index = len(stages) - 1
+
+        # Process dependencies
+        for position, upstream in enumerate(context.required_stages):
+            passed_parameters = list(upstream["config"].keys())
+
+            upstream_config = copy.copy(config)
+            upstream_config.update(upstream["config"])
+
+            cycle_hashes = definition["cycle_hashes"] if "cycle_hashes" in definition else set()
+            cycle_hashes.add(cycle_hash)
+
+            upstream = copy.copy(upstream)
+            upstream.update({
+                "config": upstream_config,
+                "downstream-index": stage_index,
+                "downstream-position": position,
+                "downstream-length": len(context.required_stages),
+                "downstream-passed-parameters": passed_parameters,
+                "cycle_hashes": cycle_hashes
+            })
+            pending.append(upstream)
+
+    # Now go backwards in the tree to find intermediate config requirements and set up dependencies
+    downstream_indices = set([
+        stage["downstream-index"]
+        for stage in stages if "downstream-index" in stage
+    ])
+
+    source_indices = set(range(len(stages))) - downstream_indices
+
+    # Connect downstream stages with upstream stages via dependency field
+    pending = list(source_indices)
+
+    while len(pending) > 0:
+        stage_index = pending.pop(0)
+        stage = stages[stage_index]
+
+        if "downstream-index" in stage:
+            downstream = stages[stage["downstream-index"]]
+
+            # Connect this stage with the downstream stage
+            if not "dependencies" in downstream:
+                downstream["dependencies"] = [None] * stage["downstream-length"]
+
+            downstream["dependencies"][stage["downstream-position"]] = stage_index
+
+            pending.append(stage["downstream-index"])
+
+    # Update configuration requirements based dependencies
+    pending = list(source_indices)
+
+    while len(pending) > 0:
+        stage_index = pending.pop(0)
+        stage = stages[stage_index]
+
+        if "dependencies" in stage:
+            passed_config_options = {}
+
+            for upstream_index in stage["dependencies"]:
+                upstream = stages[upstream_index]
+
+                upstream_config_keys = upstream["config"].keys()
+                explicit_config_keys = upstream["downstream-passed-parameters"] if "downstream-passed-parameters" in upstream else set()
+
+                for key in upstream_config_keys - explicit_config_keys:
+                    value = upstream["config"][key]
+
+                    if key in passed_config_options:
+                        assert passed_config_options[key] == value
+                    else:
+                        passed_config_options[key] = value
+
+            for key, value in passed_config_options.items():
+                if key in stage["config"]:
+                    assert stage["config"][key] == value
+                else:
+                    stage["config"][key] = value
+
+        if "downstream-index" in stage:
+            pending.append(stage["downstream-index"])
+
+    # Hash all stages
+    required_hashes = {}
+
+    for stage in stages:
+        stage["hash"] = hash_name(stage["wrapper"].name, stage["config"])
+
+        if "required-index" in stage:
+            index = stage["required-index"]
+
+            if stage["hash"] in required_hashes:
+                assert required_hashes[stage["hash"]] == index
+            else:
+                required_hashes[stage["hash"]] = index
+
+    # Collapse stages again by hash
+    registry = {}
+
+    for stage in stages:
+        registry[stage["hash"]] = stage
+
+        stage["dependencies"] = [
+            stages[index]["hash"] for index in stage["dependencies"]
+        ] if "dependencies" in stage else []
+
+    for hash in required_hashes:
+        registry[hash]["required-index"] = required_hashes[hash]
+
+    return registry
 
 def run(definitions, config = {}, working_directory = None, verbose = False, logger = logging.getLogger("synpp")):
     # 0) Construct pipeline config
@@ -246,84 +398,31 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
         if not os.path.isdir(working_directory):
             raise PipelineError("Working directory does not exist: %s" % working_directory)
 
-    # 1) Construct stage objects
-    pending_definitions = definitions[:]
+    # 1) Construct stage registry
+    registry = process_stages(definitions, config)
 
-    unconfigured_registry = {}
-    hashed_registry = {}
-    required_names = []
+    required_hashes = [None] * len(definitions)
+    for stage in registry.values():
+        if "required-index" in stage:
+            required_hashes[stage["required-index"]] = stage["hash"]
 
-    dependencies = {}
-    contexts = {}
-
-    while len(pending_definitions) > 0:
-        definition = pending_definitions.pop(0)
-
-        stage_config = copy.copy(config)
-
-        if "config" in definition:
-            stage_config.update(definition["config"])
-
-        # Resolve the underlying code of the stage
-        unconfigured_stage = resolve_stage(definition["descriptor"])
-        unconfigured_name = unconfigured_stage.name
-
-        if not unconfigured_name in unconfigured_registry:
-            unconfigured_registry[unconfigured_name] = unconfigured_stage
-        else:
-            unconfigured_stage = unconfigured_registry[unconfigured_name]
-
-        # Call the configure method of the stage and obtain parameters
-        context = ConfigurationContext(stage_config)
-        unconfigured_stage.configure(context)
-
-        # Create a configured version of the stage
-        configured_stage = configure_stage(unconfigured_stage, context, stage_config)
-        hashed_name = configured_stage.hashed_name
-
-        if hashed_name in hashed_registry:
-            configured_stage = hashed_registry[hashed_name]
-        else:
-            hashed_registry[hashed_name] = configured_stage
-
-            # Go through dependencies
-            for index, dependency in enumerate(context.required_stages):
-                pending_definitions.append({
-                    "descriptor": dependency["descriptor"],
-                    "config": dependency["config"],
-                    ":child": { "name": hashed_name, "index": index, "size": len(context.required_stages) }
-                })
-
-        # Add to dependnecy tree
-        if ":child" in definition:
-            child = definition[":child"]
-
-            if not child["name"] in dependencies:
-                dependencies[child["name"]] = [None] * child["size"]
-
-            dependencies[child["name"]][child["index"]] = hashed_name
-
-        # Make sure we capture the results
-        if definition in definitions:
-            required_names.append(hashed_name)
-
-    logger.info("Found %d stages" % len(hashed_registry))
+    logger.info("Found %d stages" % len(registry))
 
     # 2) Order stages
     graph = nx.DiGraph()
 
-    for name in hashed_registry.keys():
-        graph.add_node(name)
+    for hash in registry.keys():
+        graph.add_node(hash)
 
-    for child_name, parent_names in dependencies.items():
-        for parent_name in parent_names:
-            graph.add_edge(parent_name, child_name)
+    for stage in registry.values():
+        for hash in stage["dependencies"]:
+            graph.add_edge(hash, stage["hash"])
 
     for cycle in nx.cycles.simple_cycles(graph):
-        cycle = [hashed_registry[item].configured_name for item in cycle]
+        cycle = [registry[hash]["hash"] for hash in cycle] # TODO: Make more verbose
         raise PipelineError("Found cycle: %s" % " -> ".join(cycle))
 
-    sorted_names = list(nx.topological_sort(graph))
+    sorted_hashes = list(nx.topological_sort(graph))
 
     # 3) Load information about stages
     meta = {}
@@ -339,102 +438,62 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
     # 4) Devalidate stages
 
     # 4.1) Devalidate if they are required
-    stale_names = set(required_names)
-
-    logger.info("Devalidating %d requested stages:" % len(stale_names))
-    for name in required_names: logger.info("- %s" % name)
+    stale_hashes = set(required_hashes)
 
     # 4.2) Devalidate if not in meta
-    partial_stages = set(sorted_names) - meta.keys()
-    stale_names |= partial_stages
-
-    logger.info("Devalidating %d stages without meta data:" % len(partial_stages))
-    for name in partial_stages: logger.info("- %s" % name)
+    stale_hashes |= set(sorted_hashes) - meta.keys()
 
     # 4.3) Devalidate if configuration values have changed
-    partial_config, partial_stages = {}, set()
-
-    for name in sorted_names:
-        if not name in stale_names and name in meta:
-            for key, value in meta[name]["config"].items():
+    for hash in sorted_hashes:
+        if not hash in stale_hashes and hash in meta:
+            for key, value in meta[hash]["config"].items():
                 if not key in config or not config[key] == value:
-                    stale_names.add(name)
-
-                    partial_config[key] = (value, config[key])
-                    partial_stages.add(name)
-
-    logger.info("Devalidating %d stages because config has changed ..." % len(partial_stages))
-    for name in partial_stages: logger.info("- %s" % name)
-    logger.info("... with the following values:")
-    for key, (v1, v2) in partial_config.items(): logger.info("- %s: %s -> %s" % (key, v1, v2))
+                    stale_hashes.add(hash)
 
     # 4.4) Devalidate if parent has been updated
-    partial_stages = {}
-
-    for name in sorted_names:
-        if not name in stale_names and name in meta:
-            for parent_name, parent_update in meta[name]["parents"].items():
-                if not parent_name in meta:
-                    stale_names.add(name)
-                    partial_stages[name] = parent_name
+    for hash in sorted_hashes:
+        if not hash in stale_hashes and hash in meta:
+            for dependency_hash, dependency_update in meta[hash]["dependencies"].items():
+                if not dependency_hash in meta:
+                    stale_hashes.add(hash)
                 else:
-                    if meta[parent_name]["updated"] > parent_update:
-                        stale_names.add(name)
-                        partial_stages[name] = parent_name
-
-    logger.info("Devalidating %d stages because parent was updated:" % len(partial_stages))
-    for p in partial_stages.items(): logger.info("- %s (because of %s)" % p)
+                    if meta[dependency_hash]["updated"] > dependency_update:
+                        stale_hashes.add(hash)
 
     # 4.5) Devalidate if parents are not the same anymore
-    for name in sorted_names:
-        if not name in stale_names and name in meta:
-            cached_names = meta[name]["parents"].keys()
+    for hash in sorted_hashes:
+        if not hash in stale_hashes and hash in meta:
+            cached_hashes = set(meta[hash]["dependencies"].keys())
+            current_hashes = set(registry[hash]["dependencies"] if "dependencies" in registry[hash] else [])
 
-            if not name in dependencies:
-                if len(cached_names) > 0:
-                    stale_names.add(name)
-                    partial_stages.add(name)
-            elif not cached_names == set(dependencies[name]):
-                stale_names.add(name)
-                partial_stages.add(name)
-
-    logger.info("Devalidating %d stages because parents have changed:" % len(partial_stages))
-    for name in partial_stages: logger.info("- %s" % name)
+            if not cached_hashes == current_hashes:
+                stale_hashes.add(hash)
 
     # 4.6) Manually devalidate stages
-    partial_stages = set()
+    for hash in sorted_hashes:
+        stage = registry[hash]
+        cache_path = "%s/%s.cache" % (working_directory, hash)
+        context = ValidateContext(stage["config"], cache_path)
 
-    for name in sorted_names:
-        stage = hashed_registry[name]
-        cache_path = "%s/%s.cache" % (working_directory, name)
-        context = ValidateContext(stage.configuration_context, cache_path)
-
-        validation_token = stage.validate(context)
-        existing_token = meta[name]["validation_token"] if name in meta and "validation_token" in meta[name] else None
+        validation_token = stage["wrapper"].validate(context)
+        existing_token = meta[hash]["validation_token"] if hash in meta and "validation_token" in meta[hash] else None
 
         if not validation_token == existing_token:
-            stale_names.add(name)
-            partial_stages.add(name)
-
-    logger.info("Devalidating %d stages by user-defined validation" % len(partial_stages))
-    for name in partial_stages: logger.info("- %s" % name)
+            stale_hashes.add(hash)
 
     # 4.7) Devalidate descendants of devalidated stages
-    partial_stages = set()
+    for hash in set(stale_hashes):
+        for descendant_hash in nx.descendants(graph, hash):
+            if not descendant_hash in stale_hashes:
+                stale_hashes.add(descendant_hash)
 
-    for name in set(stale_names):
-        for descendant in nx.descendants(graph, name):
-            if not descendant in stale_names:
-                stale_names.add(descendant)
-                partial_stages.add(descendant)
-
-    logger.info("Devalidating %d stages because with stale ancestors:" % len(partial_stages))
-    for name in partial_stages: logger.info("- %s" % name)
+    logger.info("Devalidating %d stages:" % len(stale_hashes))
+    for hash in stale_hashes: logger.info("- %s" % hash)
 
     # 5) Reset meta information
-    for name in stale_names:
-        if name in meta:
-            del meta[name]
+    for hash in stale_hashes:
+        if hash in meta:
+            del meta[hash]
 
     if not working_directory is None:
         with open("%s/pipeline.json" % working_directory, "w+") as f:
@@ -446,50 +505,55 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
     results = [None] * len(definitions)
     cache = {}
 
-    for name in sorted_names:
-        if name in stale_names:
-            logger.info("Executing stage %s ..." % name)
-            stage = hashed_registry[name]
+    for hash in sorted_hashes:
+        if hash in stale_hashes:
+            logger.info("Executing stage %s ..." % hash)
+            stage = registry[hash]
 
             # Load the dependencies, either from cache or from file
-            stage_dependencies = []
+            #stage_dependencies = []
+            #stage_dependency_info = {}
+
+            #if name in dependencies:
+            #    stage_dependencies = dependencies[name]
+            #
+            #    for parent in stage_dependencies:
+            #        stage_dependency_info[parent] = meta[parent]["info"]
+            #stage_dependencies =
+
             stage_dependency_info = {}
-
-            if name in dependencies:
-                stage_dependencies = dependencies[name]
-
-                for parent in stage_dependencies:
-                    stage_dependency_info[parent] = meta[parent]["info"]
+            for dependency_hash in stage["dependencies"]:
+                stage_dependency_info[dependency_hash] = meta[dependency_hash]["info"]
 
             # Prepare cache path
-            cache_path = "%s/%s.cache" % (working_directory, name)
+            cache_path = "%s/%s.cache" % (working_directory, hash)
 
             if not working_directory is None:
                 if os.path.exists(cache_path):
                     shutil.rmtree(cache_path)
                 os.mkdir(cache_path)
 
-            context = ExecuteContext(stage.configuration_context, working_directory, stage_dependencies, cache_path, pipeline_config, logger, cache, stage_dependency_info)
-            result = stage.execute(context)
-            validation_token = stage.validate(ValidateContext(stage.configuration_context, cache_path))
+            context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], cache_path, pipeline_config, logger, cache, stage_dependency_info)
+            result = stage["wrapper"].execute(context)
+            validation_token = stage["wrapper"].validate(ValidateContext(stage["config"], cache_path))
 
-            if name in required_names:
-                results[required_names.index(name)] = result
+            if hash in required_hashes:
+                results[required_hashes.index(hash)] = result
 
             if working_directory is None:
-                cache[name] = result
+                cache[hash] = result
             else:
-                with open("%s/%s.p" % (working_directory, name), "wb+") as f:
-                    logger.info("Writing cache for %s" % name)
+                with open("%s/%s.p" % (working_directory, hash), "wb+") as f:
+                    logger.info("Writing cache for %s" % hash)
                     pickle.dump(result, f)
 
             # Update meta information
-            meta[name] = {
-                "config": stage.configuration_context.required_config,
+            meta[hash] = {
+                "config": stage["config"],
                 "updated": datetime.datetime.utcnow().timestamp(),
-                "parents": {
-                    parent: meta[parent]["updated"] for parent in dependencies[name]
-                } if name in dependencies else {},
+                "dependencies": {
+                    dependency_hash: meta[dependency_hash]["updated"] for dependency_hash in stage["dependencies"]
+                },
                 "info": context.stage_info,
                 "validation_token": validation_token
             }
@@ -498,17 +562,17 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                 with open("%s/pipeline.json" % working_directory, "w+") as f:
                     json.dump(meta, f)
 
-            logger.info("Finished running %s." % name)
+            logger.info("Finished running %s." % hash)
 
     if verbose:
         info = {}
 
-        for name in sorted(meta.keys()):
-            info.update(meta[name]["info"])
+        for hash in sorted(meta.keys()):
+            info.update(meta[hash]["info"])
 
         return {
             "results": results,
-            "stale": stale_names,
+            "stale": stale_hashes,
             "info": info
         }
     else:

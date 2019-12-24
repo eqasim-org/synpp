@@ -1,8 +1,8 @@
 # CHANGELOG
 
-**1.0.0-dev**
+**1.2.0-dev**
 
-- No changes yet
+- BC: Implicitly open new dependency chains with explicitly passed config values
 
 **1.1.0**
 
