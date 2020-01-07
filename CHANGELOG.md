@@ -3,6 +3,7 @@
 **1.2.0-dev**
 
 - Fix cycle detection with implicit chains
+- Fix progress indicator for long iterations
 - BC: Implicitly open new dependency chains with explicitly passed config values
 
 **1.1.0**
