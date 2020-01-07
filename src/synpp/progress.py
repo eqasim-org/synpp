@@ -44,12 +44,12 @@ class ProgressTracker:
         else:
             message.append("%d/%d (%.2f%%)" % (self.value, self.total, 100 * self.value / self.total))
 
-        samples_per_second = max(1.0, self.value / (current_time - self.start_time))
+        samples_per_second = self.value / (current_time - self.start_time)
 
         if samples_per_second >= 1.0:
-            message.append("[%dit/s]" % samples_per_second)
+            message.append("[%.2fit/s]" % samples_per_second)
         else:
-            message.append("[%ds/it]" % (1.0 / samples_per_second,))
+            message.append("[%.2fs/it]" % (1.0 / samples_per_second,))
 
         message.append("RT %s" % format_time(current_time - self.start_time))
 
