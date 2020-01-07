@@ -261,6 +261,7 @@ def process_stages(definitions, global_config):
         context = ConfigurationContext(config)
         wrapper.configure(context)
 
+        definition = copy.copy(definition)
         definition.update({
             "wrapper": wrapper,
             "config": copy.copy(context.required_config),
@@ -273,6 +274,8 @@ def process_stages(definitions, global_config):
         cycle_hash = hash_name(definition["wrapper"].name, definition["config"])
 
         if "cycle_hashes" in definition and cycle_hash in definition["cycle_hashes"]:
+            print(definition["cycle_hashes"])
+            print(cycle_hash)
             raise PipelineError("Found cycle in dependencies: %s" % definition["wrapper"].name)
 
         # Everything fine, add it
@@ -286,8 +289,8 @@ def process_stages(definitions, global_config):
             upstream_config = copy.copy(config)
             upstream_config.update(upstream["config"])
 
-            cycle_hashes = definition["cycle_hashes"] if "cycle_hashes" in definition else set()
-            cycle_hashes.add(cycle_hash)
+            cycle_hashes = copy.copy(definition["cycle_hashes"]) if "cycle_hashes" in definition else []
+            cycle_hashes.append(cycle_hash)
 
             upstream = copy.copy(upstream)
             upstream.update({
@@ -444,11 +447,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
     stale_hashes |= set(sorted_hashes) - meta.keys()
 
     # 4.3) Devalidate if configuration values have changed
-    for hash in sorted_hashes:
-        if not hash in stale_hashes and hash in meta:
-            for key, value in meta[hash]["config"].items():
-                if not key in config or not config[key] == value:
-                    stale_hashes.add(hash)
+    # This devalidation step is obsolete since we have implicit config parameters
 
     # 4.4) Devalidate if parent has been updated
     for hash in sorted_hashes:
