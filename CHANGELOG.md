@@ -2,6 +2,7 @@
 
 **1.2.0-dev**
 
+- Show overall progress of pipeline
 - Add ephemeral stages
 - Fix cycle detection with implicit chains
 - Fix progress indicator for long iterations
