@@ -2,6 +2,7 @@
 
 **1.2.0-dev**
 
+- Keep backup when writing pipeline.json
 - Show overall progress of pipeline
 - Add ephemeral stages
 - Fix cycle detection with implicit chains

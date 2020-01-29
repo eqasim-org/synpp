@@ -394,6 +394,15 @@ def process_stages(definitions, global_config):
 
     return registry
 
+def update_json(meta, working_directory):
+    if os.path.exists("%s/pipeline.json" % working_directory):
+        shutil.move("%s/pipeline.json" % working_directory, "%s/pipeline.json.bk" % working_directory)
+
+    with open("%s/pipeline.json.new" % working_directory, "w+") as f:
+        json.dump(meta, f)
+
+    shutil.move("%s/pipeline.json.new" % working_directory, "%s/pipeline.json" % working_directory)
+
 def run(definitions, config = {}, working_directory = None, verbose = False, logger = logging.getLogger("synpp")):
     # 0) Construct pipeline config
     pipeline_config = {}
@@ -534,8 +543,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
             del meta[hash]
 
     if not working_directory is None:
-        with open("%s/pipeline.json" % working_directory, "w+") as f:
-            json.dump(meta, f)
+        update_json(meta, working_directory)
 
     logger.info("Successfully reset meta data")
 
@@ -599,8 +607,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
             }
 
             if not working_directory is None:
-                with open("%s/pipeline.json" % working_directory, "w+") as f:
-                    json.dump(meta, f)
+                update_json(meta, working_directory)
 
             # Clear cache for ephemeral stages if they are no longer needed
             if not working_directory is None:
