@@ -115,6 +115,8 @@ class ConfigurationContext:
         self.required_stages = []
         self.aliases = {}
 
+        self.ephemeral = False
+
     def config(self, option, default = NoDefaultValue()):
         if option in self.base_config:
             self.required_config[option] = self.base_config[option]
@@ -267,7 +269,8 @@ def process_stages(definitions, global_config):
             "config": copy.copy(context.required_config),
             "required_config": copy.copy(context.required_config),
             "required_stages": context.required_stages,
-            "aliases": context.aliases
+            "aliases": context.aliases,
+            "ephemeral": context.ephemeral
         })
 
         # Check for cycles
@@ -427,6 +430,19 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
 
     sorted_hashes = list(nx.topological_sort(graph))
 
+    # Set up ephemeral stage counts
+    ephemeral_counts = {}
+
+    for stage in registry.values():
+        for hash in stage["dependencies"]:
+            dependency = registry[hash]
+
+            if dependency["ephemeral"]:
+                if not hash in ephemeral_counts:
+                    ephemeral_counts[hash] = 0
+
+                ephemeral_counts[hash] += 1
+
     # 3) Load information about stages
     meta = {}
 
@@ -439,18 +455,30 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
             logger.info("Did not find pipeline metadata in %s/pipeline.json" % working_directory)
 
     # 4) Devalidate stages
+    sorted_cached_hashes = sorted_hashes - ephemeral_counts.keys()
 
     # 4.1) Devalidate if they are required
     stale_hashes = set(required_hashes)
 
     # 4.2) Devalidate if not in meta
-    stale_hashes |= set(sorted_hashes) - meta.keys()
+    for hash in sorted_cached_hashes:
+        if not hash in meta:
+            stale_hashes.add(hash)
 
     # 4.3) Devalidate if configuration values have changed
     # This devalidation step is obsolete since we have implicit config parameters
 
+    # 4.3) Devalidate if cache is not existant
+    if not working_directory is None:
+        for hash in sorted_cached_hashes:
+            directory_path = "%s/%s.cache" % (working_directory, hash)
+            file_path = "%s/%s.p" % (working_directory, hash)
+
+            if not os.path.exists(directory_path) or not os.path.exists(file_path):
+                stale_hashes.add(hash)
+
     # 4.4) Devalidate if parent has been updated
-    for hash in sorted_hashes:
+    for hash in sorted_cached_hashes:
         if not hash in stale_hashes and hash in meta:
             for dependency_hash, dependency_update in meta[hash]["dependencies"].items():
                 if not dependency_hash in meta:
@@ -460,7 +488,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                         stale_hashes.add(hash)
 
     # 4.5) Devalidate if parents are not the same anymore
-    for hash in sorted_hashes:
+    for hash in sorted_cached_hashes:
         if not hash in stale_hashes and hash in meta:
             cached_hashes = set(meta[hash]["dependencies"].keys())
             current_hashes = set(registry[hash]["dependencies"] if "dependencies" in registry[hash] else [])
@@ -469,7 +497,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                 stale_hashes.add(hash)
 
     # 4.6) Manually devalidate stages
-    for hash in sorted_hashes:
+    for hash in sorted_cached_hashes:
         stage = registry[hash]
         cache_path = "%s/%s.cache" % (working_directory, hash)
         context = ValidateContext(stage["config"], cache_path)
@@ -485,6 +513,17 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
         for descendant_hash in nx.descendants(graph, hash):
             if not descendant_hash in stale_hashes:
                 stale_hashes.add(descendant_hash)
+
+    # 4.8) Devalidate ephemeral stages if necessary
+    pending = set(stale_hashes)
+
+    while len(pending) > 0:
+        for dependency_hash in registry[pending.pop()]["dependencies"]:
+            if registry[dependency_hash]["ephemeral"]:
+                if not dependency_hash in stale_hashes:
+                    pending.add(dependency_hash)
+
+                stale_hashes.add(dependency_hash)
 
     logger.info("Devalidating %d stages:" % len(stale_hashes))
     for hash in stale_hashes: logger.info("- %s" % hash)
@@ -560,6 +599,22 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
             if not working_directory is None:
                 with open("%s/pipeline.json" % working_directory, "w+") as f:
                     json.dump(meta, f)
+
+            # Clear cache for ephemeral stages if they are no longer needed
+            if not working_directory is None:
+                for dependency_hash in stage["dependencies"]:
+                    if dependency_hash in ephemeral_counts:
+                        ephemeral_counts[dependency_hash] -= 1
+
+                        if ephemeral_counts[dependency_hash] == 0:
+                            cache_directory_path = "%s/%s.cache" % (working_directory, dependency_hash)
+                            cache_file_path = "%s/%s.p" % (working_directory, dependency_hash)
+
+                            shutil.rmtree(cache_directory_path)
+                            os.remove(cache_file_path)
+
+                            logger.info("Removed ephemeral %s." % dependency_hash)
+                            del ephemeral_counts[dependency_hash]
 
             logger.info("Finished running %s." % hash)
 
