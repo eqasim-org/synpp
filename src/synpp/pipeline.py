@@ -543,6 +543,8 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
     results = [None] * len(definitions)
     cache = {}
 
+    progress = 0
+
     for hash in sorted_hashes:
         if hash in stale_hashes:
             logger.info("Executing stage %s ..." % hash)
@@ -617,6 +619,11 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
                             del ephemeral_counts[dependency_hash]
 
             logger.info("Finished running %s." % hash)
+
+            progress += 1
+            logger.info("Pipeline progress: %d/%d (%.2f%%)" % (
+                progress, len(stale_hashes), 100 * progress / len(stale_hashes)
+            ))
 
     if verbose:
         info = {}
