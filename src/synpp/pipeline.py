@@ -10,8 +10,9 @@ import pickle
 import shutil
 
 import networkx as nx
-import pygraphviz as pgv
 import yaml
+from networkx.readwrite.nx_yaml import write_yaml
+from networkx.readwrite.json_graph import node_link_data
 
 from .general import PipelineError
 from .parallel import ParallelMasterContext
@@ -419,58 +420,6 @@ def add_package_cluster(graph, class_name):
         graph.graph_attr['label'] = p
     graph.add_node(class_name)
 
-def color_generator():
-    colors= [
-        'aquamarine',
-        'black',
-        'brown',
-        'chartreuse',
-        'cadetblue',
-        'cadetblue1',
-        'chocolate',
-        'coral',
-        'crimson',
-        'darkgoldenrod',
-        'darkgreen',
-        'darkkhaki',
-        'darkorange',
-        'darkorchid',
-        'darksalmon',
-        'darkseagreen',
-        'darkturquoise',
-        'darkviolet',
-        'deeppink',
-        'gold',
-        'black',
-        'midnightblue',
-        'maroon',
-        'magenta',
-        'lawngreen',
-        'orchid',
-        'yellowgreen']
-
-    i = 0
-    while True:
-        i += 1
-        yield colors[i % len(colors)]
-
-def analyze_stages(stages):
-    colors = color_generator()
-    graph = pgv.AGraph(directed=True)
-
-    for stage in stages.values():
-        col = next(colors)
-        stage_name = stage['descriptor']
-        graph.add_node(stage_name, color=col)
-        add_package_cluster(graph, stage_name)
-
-        for hash in stage["dependencies"]:
-            dependency_name = stages.get(hash)['descriptor']
-            graph.add_edge(stage_name, dependency_name, color=col)
-
-    graph.graph_attr['splines'] = True
-    return graph
-
 def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False, logger = logging.getLogger("synpp")):
     # 0) Construct pipeline config
     pipeline_config = {}
@@ -493,20 +442,28 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     # 2) Order stages
     graph = nx.DiGraph()
+    flowchart = nx.MultiDiGraph() # graph to later plot
 
     for hash in registry.keys():
         graph.add_node(hash)
 
     for stage in registry.values():
+        stage_name = stage['descriptor']
+        flowchart.add_node(stage_name)
+
         for hash in stage["dependencies"]:
             graph.add_edge(hash, stage["hash"])
 
+            dependency_name = registry.get(hash)['descriptor']
+            flowchart.add_edge(stage_name, dependency_name)
+
     # Write out flowchart
-    flowchart = analyze_stages(registry)
     if flowchart_path is None:
-        flowchart_path = "{}/flowchart.png".format(working_directory)
+        flowchart_path = "{}/flowchart.json".format(working_directory)
+
     logger.info("Writing pipeline flowchart to : {}".format(flowchart_path))
-    flowchart.draw(flowchart_path, prog='dot')
+    with open(flowchart_path, 'w') as outfile:
+        json.dump(node_link_data(flowchart), outfile)
 
     if dryrun:
         return
