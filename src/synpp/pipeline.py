@@ -458,7 +458,11 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             flowchart.add_edge(stage_name, dependency_name)
 
     # Write out flowchart
-    if flowchart_path is None:
+    if not flowchart_path is None:
+        flowchart_directory = os.path.dirname(os.path.abspath(flowchart_path))
+        if not os.path.isdir(flowchart_directory):
+            raise PipelineError("Flowchart directory does not exist: %s" % flowchart_directory)
+    else:
         flowchart_path = "{}/flowchart.json".format(working_directory)
 
     logger.info("Writing pipeline flowchart to : {}".format(flowchart_path))
