@@ -1,18 +1,22 @@
+import copy
+import datetime
+import hashlib
 import importlib
 import inspect
-import hashlib, json
-import networkx as nx
-import pickle
-import datetime
-import shutil
+import json
 import logging
 import os
+import pickle
+import shutil
+
+import networkx as nx
+import pygraphviz as pgv
 import yaml
-import copy
 
 from .general import PipelineError
 from .parallel import ParallelMasterContext
 from .progress import ProgressContext
+
 
 class NoDefaultValue:
     pass
@@ -403,7 +407,71 @@ def update_json(meta, working_directory):
 
     shutil.move("%s/pipeline.json.new" % working_directory, "%s/pipeline.json" % working_directory)
 
-def run(definitions, config = {}, working_directory = None, verbose = False, logger = logging.getLogger("synpp")):
+def package_iterator(class_name):
+    i = class_name.find('.')
+    while i > 0:
+        yield class_name[0:i]
+        i = class_name.find('.', i+1)
+
+def add_package_cluster(graph, class_name):
+    for p in package_iterator(class_name):
+        graph = graph.add_subgraph(name=f'cluster {p}')
+        graph.graph_attr['label'] = p
+    graph.add_node(class_name)
+
+def color_generator():
+    colors= [
+        'aquamarine',
+        'black',
+        'brown',
+        'chartreuse',
+        'cadetblue',
+        'cadetblue1',
+        'chocolate',
+        'coral',
+        'crimson',
+        'darkgoldenrod',
+        'darkgreen',
+        'darkkhaki',
+        'darkorange',
+        'darkorchid',
+        'darksalmon',
+        'darkseagreen',
+        'darkturquoise',
+        'darkviolet',
+        'deeppink',
+        'gold',
+        'black',
+        'midnightblue',
+        'maroon',
+        'magenta',
+        'lawngreen',
+        'orchid',
+        'yellowgreen']
+
+    i = 0
+    while True:
+        i += 1
+        yield colors[i % len(colors)]
+
+def analyze_stages(stages):
+    colors = color_generator()
+    graph = pgv.AGraph(directed=True)
+
+    for stage in stages.values():
+        col = next(colors)
+        stage_name = stage['descriptor']
+        graph.add_node(stage_name, color=col)
+        add_package_cluster(graph, stage_name)
+
+        for hash in stage["dependencies"]:
+            dependency_name = stages.get(hash)['descriptor']
+            graph.add_edge(stage_name, dependency_name, color=col)
+
+    graph.graph_attr['splines'] = True
+    return graph
+
+def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False, logger = logging.getLogger("synpp")):
     # 0) Construct pipeline config
     pipeline_config = {}
     if "processes" in config: pipeline_config["processes"] = config["processes"]
@@ -432,6 +500,16 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
     for stage in registry.values():
         for hash in stage["dependencies"]:
             graph.add_edge(hash, stage["hash"])
+
+    # Write out flowchart
+    flowchart = analyze_stages(registry)
+    if flowchart_path is None:
+        flowchart_path = "{}/flowchart.png".format(working_directory)
+    logger.info("Writing pipeline flowchart to : {}".format(flowchart_path))
+    flowchart.draw(flowchart_path, prog='dot')
+
+    if dryrun:
+        return
 
     for cycle in nx.cycles.simple_cycles(graph):
         cycle = [registry[hash]["hash"] for hash in cycle] # TODO: Make more verbose
@@ -646,6 +724,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
     else:
         return results
 
+
 def run_from_yaml(path):
     with open(path) as f:
         settings = yaml.load(f, Loader = yaml.SafeLoader)
@@ -666,5 +745,7 @@ def run_from_yaml(path):
 
     config = settings["config"] if "config" in settings else {}
     working_directory = settings["working_directory"] if "working_directory" in settings else None
+    flowchart_path = settings["flowchart_path"] if "flowchart_path" in settings else None
+    dryrun = settings["dryrun"] if "dryrun" in settings else False
 
-    run(definitions, config, working_directory)
+    run(definitions=definitions, config=config, working_directory=working_directory, flowchart_path=flowchart_path, dryrun=dryrun)
