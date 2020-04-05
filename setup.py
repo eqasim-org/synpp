@@ -19,7 +19,7 @@ setup(
     package_dir = { "": "src" },
     packages = find_packages(where = "src"),
     python_requires='>=3.0',
-    install_requires = ["networkx>=2.4", "PyYAML>=5.1.2", "pyzmq>=18.1.0"],
+    install_requires = ["networkx>=2.4", "PyYAML>=5.1.2", "pyzmq>=18.1.0", "pygraphviz>=1.5"],
     extras_require = {
         "test": ["pytest>=5.3.1"], "example": ["pandas>=0.25.3"]
     },
