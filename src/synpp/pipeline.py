@@ -462,15 +462,13 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         flowchart_directory = os.path.dirname(os.path.abspath(flowchart_path))
         if not os.path.isdir(flowchart_directory):
             raise PipelineError("Flowchart directory does not exist: %s" % flowchart_directory)
-    else:
-        flowchart_path = "{}/flowchart.json".format(working_directory)
 
-    logger.info("Writing pipeline flowchart to : {}".format(flowchart_path))
-    with open(flowchart_path, 'w') as outfile:
-        json.dump(node_link_data(flowchart), outfile)
+        logger.info("Writing pipeline flowchart to : {}".format(flowchart_path))
+        with open(flowchart_path, 'w') as outfile:
+            json.dump(node_link_data(flowchart), outfile)
 
-    if dryrun:
-        return
+        if dryrun:
+            return
 
     for cycle in nx.cycles.simple_cycles(graph):
         cycle = [registry[hash]["hash"] for hash in cycle] # TODO: Make more verbose
