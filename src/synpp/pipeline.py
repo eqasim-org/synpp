@@ -449,13 +449,16 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     for stage in registry.values():
         stage_name = stage['descriptor']
-        flowchart.add_node(stage_name)
+
+        if not flowchart.has_node(stage_name):
+            flowchart.add_node(stage_name)
 
         for hash in stage["dependencies"]:
             graph.add_edge(hash, stage["hash"])
 
             dependency_name = registry.get(hash)['descriptor']
-            flowchart.add_edge(stage_name, dependency_name)
+            if not flowchart.has_edge(dependency_name, stage_name):
+                flowchart.add_edge(dependency_name, stage_name)
 
     # Write out flowchart
     if not flowchart_path is None:
@@ -467,8 +470,8 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         with open(flowchart_path, 'w') as outfile:
             json.dump(node_link_data(flowchart), outfile)
 
-        if dryrun:
-            return
+    if dryrun:
+        return node_link_data(flowchart)
 
     for cycle in nx.cycles.simple_cycles(graph):
         cycle = [registry[hash]["hash"] for hash in cycle] # TODO: Make more verbose
@@ -678,7 +681,8 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         return {
             "results": results,
             "stale": stale_hashes,
-            "info": info
+            "info": info,
+            "flowchart": node_link_data(flowchart)
         }
     else:
         return results
