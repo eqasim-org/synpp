@@ -1,18 +1,23 @@
+import copy
+import datetime
+import hashlib
 import importlib
 import inspect
-import hashlib, json
-import networkx as nx
-import pickle
-import datetime
-import shutil
+import json
 import logging
 import os
+import pickle
+import shutil
+
+import networkx as nx
 import yaml
-import copy
+from networkx.readwrite.nx_yaml import write_yaml
+from networkx.readwrite.json_graph import node_link_data
 
 from .general import PipelineError
 from .parallel import ParallelMasterContext
 from .progress import ProgressContext
+
 
 class NoDefaultValue:
     pass
@@ -403,7 +408,19 @@ def update_json(meta, working_directory):
 
     shutil.move("%s/pipeline.json.new" % working_directory, "%s/pipeline.json" % working_directory)
 
-def run(definitions, config = {}, working_directory = None, verbose = False, logger = logging.getLogger("synpp")):
+def package_iterator(class_name):
+    i = class_name.find('.')
+    while i > 0:
+        yield class_name[0:i]
+        i = class_name.find('.', i+1)
+
+def add_package_cluster(graph, class_name):
+    for p in package_iterator(class_name):
+        graph = graph.add_subgraph(name=f'cluster {p}')
+        graph.graph_attr['label'] = p
+    graph.add_node(class_name)
+
+def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False, logger = logging.getLogger("synpp")):
     # 0) Construct pipeline config
     pipeline_config = {}
     if "processes" in config: pipeline_config["processes"] = config["processes"]
@@ -425,13 +442,36 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
 
     # 2) Order stages
     graph = nx.DiGraph()
+    flowchart = nx.MultiDiGraph() # graph to later plot
 
     for hash in registry.keys():
         graph.add_node(hash)
 
     for stage in registry.values():
+        stage_name = stage['descriptor']
+
+        if not flowchart.has_node(stage_name):
+            flowchart.add_node(stage_name)
+
         for hash in stage["dependencies"]:
             graph.add_edge(hash, stage["hash"])
+
+            dependency_name = registry.get(hash)['descriptor']
+            if not flowchart.has_edge(dependency_name, stage_name):
+                flowchart.add_edge(dependency_name, stage_name)
+
+    # Write out flowchart
+    if not flowchart_path is None:
+        flowchart_directory = os.path.dirname(os.path.abspath(flowchart_path))
+        if not os.path.isdir(flowchart_directory):
+            raise PipelineError("Flowchart directory does not exist: %s" % flowchart_directory)
+
+        logger.info("Writing pipeline flowchart to : {}".format(flowchart_path))
+        with open(flowchart_path, 'w') as outfile:
+            json.dump(node_link_data(flowchart), outfile)
+
+    if dryrun:
+        return node_link_data(flowchart)
 
     for cycle in nx.cycles.simple_cycles(graph):
         cycle = [registry[hash]["hash"] for hash in cycle] # TODO: Make more verbose
@@ -641,10 +681,12 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
         return {
             "results": results,
             "stale": stale_hashes,
-            "info": info
+            "info": info,
+            "flowchart": node_link_data(flowchart)
         }
     else:
         return results
+
 
 def run_from_yaml(path):
     with open(path) as f:
@@ -666,5 +708,7 @@ def run_from_yaml(path):
 
     config = settings["config"] if "config" in settings else {}
     working_directory = settings["working_directory"] if "working_directory" in settings else None
+    flowchart_path = settings["flowchart_path"] if "flowchart_path" in settings else None
+    dryrun = settings["dryrun"] if "dryrun" in settings else False
 
-    run(definitions, config, working_directory)
+    run(definitions=definitions, config=config, working_directory=working_directory, flowchart_path=flowchart_path, dryrun=dryrun)

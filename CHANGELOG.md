@@ -2,6 +2,7 @@
 
 **1.2.0-dev**
 
+- Export pipeline flowchart as json
 - Keep backup when writing pipeline.json
 - Show overall progress of pipeline
 - Add ephemeral stages
