@@ -633,7 +633,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             else:
                 with open("%s/%s.p" % (working_directory, hash), "wb+") as f:
                     logger.info("Writing cache for %s" % hash)
-                    pickle.dump(result, f)
+                    pickle.dump(result, f, protocol=4)
 
             # Update meta information
             meta[hash] = {
