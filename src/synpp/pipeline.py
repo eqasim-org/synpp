@@ -11,7 +11,6 @@ import shutil
 
 import networkx as nx
 import yaml
-from networkx.readwrite.nx_yaml import write_yaml
 from networkx.readwrite.json_graph import node_link_data
 
 from .general import PipelineError
@@ -21,6 +20,7 @@ from .progress import ProgressContext
 
 class NoDefaultValue:
     pass
+
 
 class StageInstance:
     def __init__(self, instance, name):
@@ -46,6 +46,7 @@ class StageInstance:
         else:
             raise RuntimeError("Stage %s does not have execute method" % self.name)
 
+
 def resolve_stage(descriptor):
     if isinstance(descriptor, str):
         try:
@@ -68,6 +69,7 @@ def resolve_stage(descriptor):
     clazz = descriptor.__class__
     return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__))
 
+
 def configure_stage(instance, context, config):
     config_values = {}
 
@@ -81,9 +83,11 @@ def configure_stage(instance, context, config):
 
     return ConfiguredStage(instance, config, context)
 
+
 def configure_name(name, config):
     values = ["%s=%s" % (name, value) for name, value in config.items()]
     return "%s(%s)" % (name, ",".join(values))
+
 
 def hash_name(name, config):
     if len(config) > 0:
@@ -92,6 +96,7 @@ def hash_name(name, config):
         return "%s__%s" % (name, hash.hexdigest())
     else:
         return name
+
 
 class ConfiguredStage:
     def __init__(self, instance, config, configuration_context):
@@ -110,6 +115,7 @@ class ConfiguredStage:
 
     def validate(self, context):
         return self.instance.validate(context)
+
 
 class ConfigurationContext:
     def __init__(self, base_config):
@@ -147,6 +153,7 @@ class ConfigurationContext:
             if not alias is None:
                 self.aliases[alias] = definition
 
+
 class ValidateContext:
     def __init__(self, required_config, cache_path):
         self.required_config = required_config
@@ -160,6 +167,7 @@ class ValidateContext:
 
     def path(self):
         return self.cache_path
+
 
 class ExecuteContext:
     def __init__(self, required_config, required_stages, aliases, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info):
@@ -244,6 +252,7 @@ class ExecuteContext:
             raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["config"]))
 
         return self.dependencies[self.required_stages.index(definition)]
+
 
 def process_stages(definitions, global_config):
     pending = copy.copy(definitions)
@@ -399,6 +408,7 @@ def process_stages(definitions, global_config):
 
     return registry
 
+
 def update_json(meta, working_directory):
     if os.path.exists("%s/pipeline.json" % working_directory):
         shutil.move("%s/pipeline.json" % working_directory, "%s/pipeline.json.bk" % working_directory)
@@ -408,17 +418,6 @@ def update_json(meta, working_directory):
 
     shutil.move("%s/pipeline.json.new" % working_directory, "%s/pipeline.json" % working_directory)
 
-def package_iterator(class_name):
-    i = class_name.find('.')
-    while i > 0:
-        yield class_name[0:i]
-        i = class_name.find('.', i+1)
-
-def add_package_cluster(graph, class_name):
-    for p in package_iterator(class_name):
-        graph = graph.add_subgraph(name=f'cluster {p}')
-        graph.graph_attr['label'] = p
-    graph.add_node(class_name)
 
 def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False, logger = logging.getLogger("synpp")):
     # 0) Construct pipeline config
