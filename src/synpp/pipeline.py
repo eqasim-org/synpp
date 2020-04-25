@@ -1,21 +1,26 @@
+import copy
+import datetime
+import hashlib
 import importlib
 import inspect
-import hashlib, json
-import networkx as nx
-import pickle
-import datetime
-import shutil
+import json
 import logging
 import os
+import pickle
+import shutil
+
+import networkx as nx
 import yaml
-import copy
+from networkx.readwrite.json_graph import node_link_data
 
 from .general import PipelineError
 from .parallel import ParallelMasterContext, ParalelMockMasterContext
 from .progress import ProgressContext
 
+
 class NoDefaultValue:
     pass
+
 
 class StageInstance:
     def __init__(self, instance, name):
@@ -41,6 +46,7 @@ class StageInstance:
         else:
             raise RuntimeError("Stage %s does not have execute method" % self.name)
 
+
 def resolve_stage(descriptor):
     if isinstance(descriptor, str):
         try:
@@ -63,6 +69,7 @@ def resolve_stage(descriptor):
     clazz = descriptor.__class__
     return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__))
 
+
 def configure_stage(instance, context, config):
     config_values = {}
 
@@ -76,9 +83,11 @@ def configure_stage(instance, context, config):
 
     return ConfiguredStage(instance, config, context)
 
+
 def configure_name(name, config):
     values = ["%s=%s" % (name, value) for name, value in config.items()]
     return "%s(%s)" % (name, ",".join(values))
+
 
 def hash_name(name, config):
     if len(config) > 0:
@@ -87,6 +96,7 @@ def hash_name(name, config):
         return "%s__%s" % (name, hash.hexdigest())
     else:
         return name
+
 
 class ConfiguredStage:
     def __init__(self, instance, config, configuration_context):
@@ -105,6 +115,7 @@ class ConfiguredStage:
 
     def validate(self, context):
         return self.instance.validate(context)
+
 
 class ConfigurationContext:
     def __init__(self, base_config):
@@ -142,6 +153,7 @@ class ConfigurationContext:
             if not alias is None:
                 self.aliases[alias] = definition
 
+
 class ValidateContext:
     def __init__(self, required_config, cache_path):
         self.required_config = required_config
@@ -155,6 +167,7 @@ class ValidateContext:
 
     def path(self):
         return self.cache_path
+
 
 class ExecuteContext:
     def __init__(self, required_config, required_stages, aliases, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info):
@@ -245,6 +258,7 @@ class ExecuteContext:
             raise PipelineError("Stage '%s' with parameters %s is not requested" % (definition["descriptor"], definition["config"]))
 
         return self.dependencies[self.required_stages.index(definition)]
+
 
 def process_stages(definitions, global_config):
     pending = copy.copy(definitions)
@@ -400,6 +414,7 @@ def process_stages(definitions, global_config):
 
     return registry
 
+
 def update_json(meta, working_directory):
     if os.path.exists("%s/pipeline.json" % working_directory):
         shutil.move("%s/pipeline.json" % working_directory, "%s/pipeline.json.bk" % working_directory)
@@ -409,7 +424,8 @@ def update_json(meta, working_directory):
 
     shutil.move("%s/pipeline.json.new" % working_directory, "%s/pipeline.json" % working_directory)
 
-def run(definitions, config = {}, working_directory = None, verbose = False, logger = logging.getLogger("synpp")):
+
+def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False, logger = logging.getLogger("synpp")):
     # 0) Construct pipeline config
     pipeline_config = {}
     if "processes" in config: pipeline_config["processes"] = config["processes"]
@@ -431,13 +447,36 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
 
     # 2) Order stages
     graph = nx.DiGraph()
+    flowchart = nx.MultiDiGraph() # graph to later plot
 
     for hash in registry.keys():
         graph.add_node(hash)
 
     for stage in registry.values():
+        stage_name = stage['descriptor']
+
+        if not flowchart.has_node(stage_name):
+            flowchart.add_node(stage_name)
+
         for hash in stage["dependencies"]:
             graph.add_edge(hash, stage["hash"])
+
+            dependency_name = registry.get(hash)['descriptor']
+            if not flowchart.has_edge(dependency_name, stage_name):
+                flowchart.add_edge(dependency_name, stage_name)
+
+    # Write out flowchart
+    if not flowchart_path is None:
+        flowchart_directory = os.path.dirname(os.path.abspath(flowchart_path))
+        if not os.path.isdir(flowchart_directory):
+            raise PipelineError("Flowchart directory does not exist: %s" % flowchart_directory)
+
+        logger.info("Writing pipeline flowchart to : {}".format(flowchart_path))
+        with open(flowchart_path, 'w') as outfile:
+            json.dump(node_link_data(flowchart), outfile)
+
+    if dryrun:
+        return node_link_data(flowchart)
 
     for cycle in nx.cycles.simple_cycles(graph):
         cycle = [registry[hash]["hash"] for hash in cycle] # TODO: Make more verbose
@@ -599,7 +638,7 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
             else:
                 with open("%s/%s.p" % (working_directory, hash), "wb+") as f:
                     logger.info("Writing cache for %s" % hash)
-                    pickle.dump(result, f)
+                    pickle.dump(result, f, protocol=4)
 
             # Update meta information
             meta[hash] = {
@@ -647,10 +686,12 @@ def run(definitions, config = {}, working_directory = None, verbose = False, log
         return {
             "results": results,
             "stale": stale_hashes,
-            "info": info
+            "info": info,
+            "flowchart": node_link_data(flowchart)
         }
     else:
         return results
+
 
 def run_from_yaml(path):
     with open(path) as f:
@@ -672,5 +713,7 @@ def run_from_yaml(path):
 
     config = settings["config"] if "config" in settings else {}
     working_directory = settings["working_directory"] if "working_directory" in settings else None
+    flowchart_path = settings["flowchart_path"] if "flowchart_path" in settings else None
+    dryrun = settings["dryrun"] if "dryrun" in settings else False
 
-    run(definitions, config, working_directory)
+    run(definitions=definitions, config=config, working_directory=working_directory, flowchart_path=flowchart_path, dryrun=dryrun)
