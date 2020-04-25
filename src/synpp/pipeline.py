@@ -14,7 +14,7 @@ import yaml
 from networkx.readwrite.json_graph import node_link_data
 
 from .general import PipelineError
-from .parallel import ParallelMasterContext
+from .parallel import ParallelMasterContext, ParalelMockMasterContext
 from .progress import ProgressContext
 
 
@@ -226,13 +226,19 @@ class ExecuteContext:
 
         return self.dependency_info[dependency][name]
 
-    def parallel(self, data = {}, processes = None):
+    def parallel(self, data = {}, processes = None, serialize = False):
         config = self.required_config
 
         if processes is None and "processes" in self.pipeline_config:
             processes = self.pipeline_config["processes"]
 
-        return ParallelMasterContext(data, config, processes, self.progress_context)
+        if serialize:
+            # Add mock context to run all parallel tasks in series and in
+            # the same process. This can be useful for debugging and especially
+            # for profiling the code.
+            return ParalelMockMasterContext(data, config, self.progress_context)
+        else:
+            return ParallelMasterContext(data, config, processes, self.progress_context)
 
     def progress(self, iterable = None, label = None, total = None, minimum_interval = 1.0):
         if minimum_interval is None and "progress_interval" in self.pipeline_config:

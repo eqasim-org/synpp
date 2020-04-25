@@ -92,3 +92,66 @@ class ParallelMasterContext:
 
     def imap_unordered(self, func, iterable, chunksize = 1):
         return self.pool.imap_unordered(pipeline_runner, wrap_callable(func, iterable), chunksize)
+
+class ParallelMockSlaveContext:
+    def __init__(self, data, config, progress):
+        self._config = config
+        self._data = data
+        self.progress = progress
+
+    def config(self, option):
+        if not option in self._config:
+            raise PipelineError("Config option is not available: %s" % option)
+
+        return self._config[option]
+
+    def data(self, name):
+        if not name in self._data:
+            raise PipelineParallelError("Variable '%s' has not been passed to the parallel context" % name)
+
+        return self._data[name]
+
+    def stage(self, *kargs, **kwargs):
+        raise PipelineParallelError("Cannot access stages from the parallel context")
+
+    def parallel(self, *kargs, **kwargs):
+        raise PipelineParallelError("Cannot spawn new parallel processes from a parallel process")
+
+class ParalelMockMasterContext:
+    def __init__(self, data, config, progress):
+        self.config = config
+        self.data = data
+        self.entered = False
+
+        self.progress = progress
+
+    def __enter__(self):
+        if self.entered:
+            raise PipelineParallelError("Parallel context has already been entered")
+
+        self.entered = True
+        return self
+
+    def __exit__(self ,type, value, traceback):
+        if not self.entered:
+            raise PipelineParallelError("Parallel context has not been entered")
+
+        self.entered = False
+
+    def map(self, func, iterable, chunksize = 1):
+        if chunksize > 1:
+            raise PipelineParallelError("Only allowed chunksize = 1 in simulated parallel mode")
+
+        return [
+            func(ParallelMockSlaveContext(self.data, self.config, self.progress), item)
+            for item in iterable
+        ]
+
+    def map_async(self, func, iterable, chunksize = 1, callback = None):
+        raise PipelineParallelError("Not possible ot use map_async in simulated parallel mode")
+
+    def imap(self, func, iterable, chunksize = 1):
+        return self.map(func, iterable, chunksize)
+
+    def imap_unordered(self, func, iterable, chunksize = 1):
+        return self.map(func, iterable, chunksize)

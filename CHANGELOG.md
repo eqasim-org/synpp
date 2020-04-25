@@ -2,6 +2,7 @@
 
 **1.2.0-dev**
 
+- Add option to serialize parallel contexts for profiling
 - Increment pickle protocol to version 4
 - Export pipeline flowchart as json
 - Keep backup when writing pipeline.json
