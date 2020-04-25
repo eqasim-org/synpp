@@ -2,6 +2,7 @@
 
 **1.2.0-dev**
 
+- Add option to serialize parallel contexts for profiling
 - Keep backup when writing pipeline.json
 - Show overall progress of pipeline
 - Add ephemeral stages
