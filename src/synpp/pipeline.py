@@ -126,7 +126,7 @@ class ConfigurationContext:
         self.required_stages = []
         self.aliases = {}
 
-        self.ephemeral = False
+        self.ephemeral_mask = []
 
     def config(self, option, default = NoDefaultValue()):
         if option in self.base_config:
@@ -142,13 +142,14 @@ class ConfigurationContext:
 
         return self.required_config[option]
 
-    def stage(self, descriptor, config = {}, alias = None):
+    def stage(self, descriptor, config = {}, alias = None, ephemeral = False):
         definition = {
             "descriptor": descriptor, "config": config
         }
 
         if not definition in self.required_stages:
             self.required_stages.append(definition)
+            self.ephemeral_mask.append(ephemeral)
 
             if not alias is None:
                 self.aliases[alias] = definition
@@ -289,8 +290,7 @@ def process_stages(definitions, global_config):
             "config": copy.copy(context.required_config),
             "required_config": copy.copy(context.required_config),
             "required_stages": context.required_stages,
-            "aliases": context.aliases,
-            "ephemeral": context.ephemeral
+            "aliases": context.aliases
         })
 
         # Check for cycles
@@ -322,7 +322,8 @@ def process_stages(definitions, global_config):
                 "downstream-position": position,
                 "downstream-length": len(context.required_stages),
                 "downstream-passed-parameters": passed_parameters,
-                "cycle_hashes": cycle_hashes
+                "cycle_hashes": cycle_hashes,
+                "ephemeral": context.ephemeral_mask[position] or ("ephemeral" in definition and definition["ephemeral"])
             })
             pending.append(upstream)
 
@@ -398,6 +399,10 @@ def process_stages(definitions, global_config):
                 assert required_hashes[stage["hash"]] == index
             else:
                 required_hashes[stage["hash"]] = index
+
+    # Reset ephemeral stages
+    ephemeral_hashes = set([stage["hash"] for stage in stages]) - set([stage["hash"] for stage in stages if not "ephemeral" in stage or not stage["ephemeral"]])
+    for stage in stages: stage["ephemeral"] = stage["hash"] in ephemeral_hashes
 
     # Collapse stages again by hash
     registry = {}
@@ -484,6 +489,18 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     sorted_hashes = list(nx.topological_sort(graph))
 
+    # Check where cache is available
+    cache_available = set()
+
+    if not working_directory is None:
+        for hash in sorted_hashes:
+            directory_path = "%s/%s.cache" % (working_directory, hash)
+            file_path = "%s/%s.p" % (working_directory, hash)
+
+            if os.path.exists(directory_path) and os.path.exists(file_path):
+                cache_available.add(hash)
+                registry[hash]["ephemeral"] = False
+
     # Set up ephemeral stage counts
     ephemeral_counts = {}
 
@@ -491,7 +508,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         for hash in stage["dependencies"]:
             dependency = registry[hash]
 
-            if dependency["ephemeral"]:
+            if dependency["ephemeral"] and not hash in cache_available:
                 if not hash in ephemeral_counts:
                     ephemeral_counts[hash] = 0
 
@@ -528,7 +545,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             directory_path = "%s/%s.cache" % (working_directory, hash)
             file_path = "%s/%s.p" % (working_directory, hash)
 
-            if not os.path.exists(directory_path) or not os.path.exists(file_path):
+            if not hash in cache_available:
                 stale_hashes.add(hash)
 
     # 4.4) Devalidate if parent has been updated
