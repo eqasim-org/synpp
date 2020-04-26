@@ -1,8 +1,21 @@
 # CHANGELOG
 
-**1.0.0-dev**
+**1.2.0-dev**
 
 - No changes yet
+
+**1.2.0**
+
+- Change behaviour of ephemeral stages, use as much caching as possible
+- Add option to serialize parallel contexts for profiling
+- Increment pickle protocol to version 4
+- Export pipeline flowchart as json
+- Keep backup when writing pipeline.json
+- Show overall progress of pipeline
+- Add ephemeral stages
+- Fix cycle detection with implicit chains
+- Fix progress indicator for long iterations
+- BC: Implicitly open new dependency chains with explicitly passed config values
 
 **1.1.0**
 

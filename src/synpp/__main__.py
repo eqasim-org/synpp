@@ -1,8 +1,8 @@
-import synpp
-import sys
-import argparse
-import os
 import logging
+import os
+import sys
+
+import synpp
 
 if __name__ == "__main__":
     logging.basicConfig(level = logging.INFO)

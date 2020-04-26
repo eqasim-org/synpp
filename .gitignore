@@ -3,3 +3,4 @@ env
 build
 dist
 src/synpp.egg-info
+.idea/
