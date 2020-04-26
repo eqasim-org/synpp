@@ -440,6 +440,8 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         if not os.path.isdir(working_directory):
             raise PipelineError("Working directory does not exist: %s" % working_directory)
 
+        working_directory = os.path.realpath(working_directory)
+
     # 1) Construct stage registry
     registry = process_stages(definitions, config)
 
