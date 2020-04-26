@@ -8,7 +8,7 @@ with open(path.join(here, "README.md"), encoding = "utf-8") as f:
 
 setup(
     name = "synpp",
-    version = "1.2.0-dev",
+    version = "1.2.1-dev",
     description = "Synthetic population pipeline package for eqasim",
     long_description = long_description,
     long_description_content_type = "text/markdown",

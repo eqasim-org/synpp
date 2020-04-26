@@ -1,6 +1,10 @@
 # CHANGELOG
 
-**1.2.0-dev**
+**1.2.1-dev**
+
+- No changes yet
+
+**1.2.1**
 
 - Make working directory absolute
 
