@@ -2,7 +2,7 @@
 
 **1.2.0-dev**
 
-- No changes yet
+- Make working directory absolute
 
 **1.2.0**
 
