@@ -2,6 +2,10 @@
 
 **1.2.0-dev**
 
+- No changes yet
+
+**1.2.0**
+
 - Change behaviour of ephemeral stages, use as much caching as possible
 - Add option to serialize parallel contexts for profiling
 - Increment pickle protocol to version 4
