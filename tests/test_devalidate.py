@@ -10,7 +10,7 @@ def test_devalidate_by_config(tmpdir):
 
     assert "tests.fixtures.devalidation.A1__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert "tests.fixtures.devalidation.A2" in result["stale"]
-    assert "tests.fixtures.devalidation.B" in result["stale"]
+    assert "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.B"
@@ -18,7 +18,7 @@ def test_devalidate_by_config(tmpdir):
 
     assert not "tests.fixtures.devalidation.A1__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert not "tests.fixtures.devalidation.A2" in result["stale"]
-    assert "tests.fixtures.devalidation.B" in result["stale"]
+    assert "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.B"
@@ -26,7 +26,7 @@ def test_devalidate_by_config(tmpdir):
 
     assert "tests.fixtures.devalidation.A1__9f8a8e5ba8c70c774d410a9107e2a32b" in result["stale"]
     assert not "tests.fixtures.devalidation.A2" in result["stale"]
-    assert "tests.fixtures.devalidation.B" in result["stale"]
+    assert "tests.fixtures.devalidation.B__9f8a8e5ba8c70c774d410a9107e2a32b" in result["stale"]
 
 def test_devalidate_by_passed_on_config(tmpdir):
     working_directory = tmpdir.mkdir("sub")
@@ -60,8 +60,8 @@ def test_devalidate_by_parent(tmpdir):
 
     assert "tests.fixtures.devalidation.A1__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert "tests.fixtures.devalidation.A2" in result["stale"]
-    assert "tests.fixtures.devalidation.B" in result["stale"]
-    assert "tests.fixtures.devalidation.C" in result["stale"]
+    assert "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
+    assert "tests.fixtures.devalidation.C__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.C"
@@ -69,8 +69,8 @@ def test_devalidate_by_parent(tmpdir):
 
     assert not "tests.fixtures.devalidation.A1__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert not "tests.fixtures.devalidation.A2" in result["stale"]
-    assert not "tests.fixtures.devalidation.B" in result["stale"]
-    assert "tests.fixtures.devalidation.C" in result["stale"]
+    assert not "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
+    assert "tests.fixtures.devalidation.C__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.A2"
@@ -78,8 +78,8 @@ def test_devalidate_by_parent(tmpdir):
 
     assert not "tests.fixtures.devalidation.A1__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert "tests.fixtures.devalidation.A2" in result["stale"]
-    assert not "tests.fixtures.devalidation.B" in result["stale"]
-    assert not "tests.fixtures.devalidation.C" in result["stale"]
+    assert not "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
+    assert not "tests.fixtures.devalidation.C__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.C"
@@ -87,8 +87,8 @@ def test_devalidate_by_parent(tmpdir):
 
     assert not "tests.fixtures.devalidation.A1__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert not "tests.fixtures.devalidation.A2" in result["stale"]
-    assert "tests.fixtures.devalidation.B" in result["stale"]
-    assert "tests.fixtures.devalidation.C" in result["stale"]
+    assert "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
+    assert "tests.fixtures.devalidation.C__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
 
 def test_devalidate_descendants(tmpdir):
     working_directory = tmpdir.mkdir("sub")
@@ -99,8 +99,8 @@ def test_devalidate_descendants(tmpdir):
 
     assert "tests.fixtures.devalidation.A1__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert "tests.fixtures.devalidation.A2" in result["stale"]
-    assert "tests.fixtures.devalidation.B" in result["stale"]
-    assert "tests.fixtures.devalidation.C" in result["stale"]
+    assert "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
+    assert "tests.fixtures.devalidation.C__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.C"
@@ -110,8 +110,8 @@ def test_devalidate_descendants(tmpdir):
 
     assert not "tests.fixtures.devalidation.A1__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert "tests.fixtures.devalidation.A2" in result["stale"]
-    assert "tests.fixtures.devalidation.B" in result["stale"]
-    assert "tests.fixtures.devalidation.C" in result["stale"]
+    assert "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
+    assert "tests.fixtures.devalidation.C__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
 
 def test_devalidate_token(tmpdir):
     working_directory = tmpdir.mkdir("sub")
@@ -124,21 +124,23 @@ def test_devalidate_token(tmpdir):
         "descriptor": "tests.fixtures.devalidation.token_b"
     }], config = { "path": path }, working_directory = working_directory, verbose = True)
 
-    stage_name = None
+    name_a, name_b = None, None
     for name in result["stale"]:
         if "token_a" in name:
-            stage_name = name
+            name_a = name
+        if "token_b" in name:
+            name_b = name
 
-    assert stage_name in result["stale"]
-    assert "tests.fixtures.devalidation.token_b" in result["stale"]
+    assert name_a in result["stale"]
+    assert name_b in result["stale"]
     assert result["results"][0] == "abcdef"
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.token_b"
     }], config = { "path": path }, working_directory = working_directory, verbose = True)
 
-    assert not stage_name in result["stale"]
-    assert "tests.fixtures.devalidation.token_b" in result["stale"]
+    assert not name_a in result["stale"]
+    assert name_b in result["stale"]
     assert result["results"][0] == "abcdef"
 
     with open(path, "w+") as f:
@@ -148,6 +150,6 @@ def test_devalidate_token(tmpdir):
         "descriptor": "tests.fixtures.devalidation.token_b"
     }], config = { "path": path }, working_directory = working_directory, verbose = True)
 
-    assert stage_name in result["stale"]
-    assert "tests.fixtures.devalidation.token_b" in result["stale"]
+    assert name_a in result["stale"]
+    assert name_b in result["stale"]
     assert result["results"][0] == "uvwxyz"
