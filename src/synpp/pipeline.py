@@ -5,7 +5,7 @@ import importlib
 import inspect
 import json
 import logging
-import os
+import os, stat, errno
 import pickle
 import shutil
 
@@ -16,6 +16,16 @@ from networkx.readwrite.json_graph import node_link_data
 from .general import PipelineError
 from .parallel import ParallelMasterContext, ParalelMockMasterContext
 from .progress import ProgressContext
+
+def handle_rmtree_error(delegate, path, exec):
+  if delegate in (os.rmdir, os.remove) and exec[1].errno == errno.EACCES:
+      os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
+      delegate(path)
+  else:
+      raise
+
+def rmtree(path):
+    return shutil.rmtree(path, ignore_errors = False, onerror = handle_rmtree_error)
 
 
 class NoDefaultValue:
@@ -642,7 +652,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
             if not working_directory is None:
                 if os.path.exists(cache_path):
-                    shutil.rmtree(cache_path)
+                    rmtree(cache_path)
                 os.mkdir(cache_path)
 
             context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], cache_path, pipeline_config, logger, cache, stage_dependency_info)
@@ -683,7 +693,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                             cache_directory_path = "%s/%s.cache" % (working_directory, dependency_hash)
                             cache_file_path = "%s/%s.p" % (working_directory, dependency_hash)
 
-                            shutil.rmtree(cache_directory_path)
+                            rmtree(cache_directory_path)
                             os.remove(cache_file_path)
 
                             logger.info("Removed ephemeral %s." % dependency_hash)
