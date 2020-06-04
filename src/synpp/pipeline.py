@@ -17,6 +17,9 @@ from .general import PipelineError
 from .parallel import ParallelMasterContext, ParalelMockMasterContext
 from .progress import ProgressContext
 
+# The following two functions extend shutil.rmtree, because by default it
+# refuses to delete write-protected files on Windows. However, we often want
+# to delete .git directories, which are protected.
 def handle_rmtree_error(delegate, path, exec):
   if delegate in (os.rmdir, os.remove) and exec[1].errno == errno.EACCES:
       os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)

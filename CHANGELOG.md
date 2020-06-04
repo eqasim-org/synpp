@@ -2,7 +2,7 @@
 
 **1.2.1-dev**
 
-- No changes yet
+- Make deletion available for write-protected directories in Windows
 
 **1.2.1**
 
