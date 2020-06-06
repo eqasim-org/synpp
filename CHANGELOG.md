@@ -1,6 +1,10 @@
 # CHANGELOG
 
-**1.2.1-dev**
+**1.2.2-dev**
+
+- *No changes yet*
+
+**1.2.2**
 
 - Make deletion available for write-protected directories in Windows
 
