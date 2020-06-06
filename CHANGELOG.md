@@ -12,6 +12,10 @@
 
 - Make working directory absolute
 
+**1.2.1**
+
+- Make working directory absolute
+
 **1.2.0**
 
 - Change behaviour of ephemeral stages, use as much caching as possible
