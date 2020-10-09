@@ -153,3 +153,74 @@ def test_devalidate_token(tmpdir):
     assert name_a in result["stale"]
     assert name_b in result["stale"]
     assert result["results"][0] == "uvwxyz"
+
+import sys
+import importlib
+
+def test_devalidate_by_changed_file(tmpdir):
+    working_directory = str(tmpdir.mkdir("sub"))
+
+    # First, create modules and run
+
+    with open("%s/changing_module_a.py" % working_directory, "w+") as f:
+        f.write("\n".join([
+            "def configure(context):",
+            "  context.stage(\"changing_module_b\")",
+            "def execute(context): pass"
+        ]))
+
+    with open("%s/changing_module_b.py" % working_directory, "w+") as f:
+        f.write("\n".join([
+            "def configure(context):",
+            "  pass",
+            "def execute(context): pass"
+        ]))
+
+    sys.path.append(working_directory)
+
+    import changing_module_b
+    importlib.reload(changing_module_b)
+
+    result = synpp.run([{
+        "descriptor": "changing_module_a"
+    }], working_directory = working_directory, verbose = True)
+
+    name_a, name_b = None, None
+    for name in result["stale"]:
+        if "changing_module_a" in name:
+            name_a = name
+        if "changing_module_b" in name:
+            name_b = name
+
+    assert name_a in result["stale"]
+    assert name_b in result["stale"]
+
+    # Second, run again: B is cached now
+
+    importlib.reload(changing_module_b)
+
+    result = synpp.run([{
+        "descriptor": "changing_module_a"
+    }], working_directory = working_directory, verbose = True)
+
+    assert name_a in result["stale"]
+    assert not name_b in result["stale"]
+
+    # Third, change B and run again: B should be devalidated!
+
+    with open("%s/changing_module_b.py" % working_directory, "w+") as f:
+        f.write("\n".join([
+            "def configure(context):",
+            "  print(\"test\")",
+            "  pass",
+            "def execute(context): pass"
+        ]))
+
+    importlib.reload(changing_module_b)
+
+    result = synpp.run([{
+        "descriptor": "changing_module_a"
+    }], working_directory = working_directory, verbose = True)
+
+    assert name_a in result["stale"]
+    assert name_b in result["stale"]

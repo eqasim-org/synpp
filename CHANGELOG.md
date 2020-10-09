@@ -2,15 +2,11 @@
 
 **1.2.2-dev**
 
-- *No changes yet*
+- Devalidate stages if code has changed
 
 **1.2.2**
 
 - Make deletion available for write-protected directories in Windows
-
-**1.2.1**
-
-- Make working directory absolute
 
 **1.2.1**
 

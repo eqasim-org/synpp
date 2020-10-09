@@ -36,9 +36,10 @@ class NoDefaultValue:
 
 
 class StageInstance:
-    def __init__(self, instance, name):
+    def __init__(self, instance, name, module_hash):
         self.instance = instance
         self.name = name
+        self.module_hash = module_hash
 
     def parameterize(self, parameters):
         return ParameterizedStage(self.instance, self.name)
@@ -59,28 +60,44 @@ class StageInstance:
         else:
             raise RuntimeError("Stage %s does not have execute method" % self.name)
 
+def get_module_hash(module):
+    if os.path.exists(module.__file__):
+        with open(module.__file__) as f:
+            hash = hashlib.md5()
+            hash.update(f.read().encode("ascii"))
+            return hash.hexdigest()
+
+    return None
 
 def resolve_stage(descriptor):
+    module_hash = None
+
     if isinstance(descriptor, str):
         try:
             # Try to get the module referenced by the string
             descriptor = importlib.import_module(descriptor)
+            module_hash = get_module_hash(descriptor)
         except ModuleNotFoundError:
             # Not a module, but maybe a class?
             parts = descriptor.split(".")
 
             module = importlib.import_module(".".join(parts[:-1]))
+            module_hash = get_module_hash(module)
+
             constructor = getattr(module, parts[-1])
             descriptor = constructor()
 
     if inspect.ismodule(descriptor):
-        return StageInstance(descriptor, descriptor.__name__)
+        module_hash = get_module_hash(descriptor)
+        return StageInstance(descriptor, descriptor.__name__, module_hash)
 
     if inspect.isclass(descriptor):
-        return StageInstance(descriptor(), "%s.%s" % (descriptor.__module__, descriptor.__name__))
+        module = importlib.import_module(descriptor.__module__)
+        module_hash = get_module_hash(module)
+        return StageInstance(descriptor(), "%s.%s" % (descriptor.__module__, descriptor.__name__), module_hash)
 
     clazz = descriptor.__class__
-    return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__))
+    return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__), module_hash)
 
 
 def configure_stage(instance, context, config):
@@ -554,6 +571,19 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     # 4.3) Devalidate if configuration values have changed
     # This devalidation step is obsolete since we have implicit config parameters
 
+    # 4.3) Devalidate if module hash of a stage has changed
+    for hash in sorted_cached_hashes:
+        if hash in meta:
+            if not "module_hash" in meta[hash]:
+                stale_hashes.add(hash) # Backwards compatibility
+
+            else:
+                previous_module_hash = meta[hash]["module_hash"]
+                current_module_hash = registry[hash]["wrapper"].module_hash
+
+                if previous_module_hash != current_module_hash:
+                    stale_hashes.add(hash)
+
     # 4.3) Devalidate if cache is not existant
     if not working_directory is None:
         for hash in sorted_cached_hashes:
@@ -680,7 +710,8 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                     dependency_hash: meta[dependency_hash]["updated"] for dependency_hash in stage["dependencies"]
                 },
                 "info": context.stage_info,
-                "validation_token": validation_token
+                "validation_token": validation_token,
+                "module_hash": stage["wrapper"].module_hash
             }
 
             if not working_directory is None:
