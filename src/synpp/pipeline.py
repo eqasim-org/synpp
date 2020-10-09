@@ -64,7 +64,7 @@ def get_module_hash(module):
     if os.path.exists(module.__file__):
         with open(module.__file__) as f:
             hash = hashlib.md5()
-            hash.update(f.read().encode("ascii"))
+            hash.update(f.read().encode("utf-8"))
             return hash.hexdigest()
 
     return None
@@ -143,7 +143,7 @@ def configure_name(name, config):
 def hash_name(name, config):
     if len(config) > 0:
         hash = hashlib.md5()
-        hash.update(json.dumps(config, sort_keys = True).encode("ascii"))
+        hash.update(json.dumps(config, sort_keys = True).encode("utf-8"))
         return "%s__%s" % (name, hash.hexdigest())
     else:
         return name

@@ -4,6 +4,10 @@
 
 - No changes yet
 
+**1.3.1**
+
+- Bugfix: hashing of input files
+
 **1.3.0**
 
 - Allow hierarchical configuration options
