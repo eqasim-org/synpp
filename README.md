@@ -174,6 +174,7 @@ to the following scheme. A *stage* is devalidated if ...
 
 - ... it is requested by the `run` call
 - ... it is new (no meta data from a previous call is present)
+- ... the code of the containing file has changed
 - ... if at least one of the requested configuration options has changed
 - ... if at least one dependency has been re-run since the last run of the stage
 - ... if list of dependencies has changed
