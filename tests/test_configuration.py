@@ -1,5 +1,6 @@
 from synpp import ConfigurationContext, PipelineError
 from pytest import raises
+import synpp
 
 def test_config_option():
     context = ConfigurationContext({ "abc": "def" })
@@ -35,3 +36,92 @@ def test_stage():
     assert ({"descriptor": "stage1", "config": {}}) in context.required_stages
     assert ({"descriptor": "stage2", "config": { "uvw": "xyz" }}) in context.required_stages
     assert 2 == len(context.required_stages)
+
+class ComplexStage:
+    def configure(self, context):
+        context.config("option")
+        context.config("option.sub")
+
+    def execute(self, context):
+        pass
+
+class ComplexStageMaster:
+    def configure(self, context):
+        context.stage(ComplexStage)
+
+    def execute(self, context):
+        pass
+
+def test_complex_config(tmpdir):
+    working_directory = tmpdir.mkdir("sub")
+
+    config = {
+        "option": {
+            "xyz": 123,
+            "sub": {
+                "xyz": 123
+            }
+        }
+    }
+
+    # First: Need to run stage
+
+    result = synpp.run([{
+        "descriptor": ComplexStageMaster,
+        "config": config }], verbose = True, working_directory = working_directory)
+
+    assert 2 == len(result["stale"])
+
+    # Second: Stage is cached
+
+    result = synpp.run([{
+        "descriptor": ComplexStageMaster,
+        "config": config }], verbose = True, working_directory = working_directory)
+
+    assert 1 == len(result["stale"])
+
+    # Third: Let's change the sub-value
+    config["option"]["sub"]["new"] = 5
+
+    result = synpp.run([{
+        "descriptor": ComplexStageMaster,
+        "config": config }], verbose = True, working_directory = working_directory)
+
+    assert 2 == len(result["stale"])
+
+    result = synpp.run([{
+        "descriptor": ComplexStageMaster,
+        "config": config }], verbose = True, working_directory = working_directory)
+
+    assert 1 == len(result["stale"])
+
+    # Fourth: Let's change the whole value
+    config["option"] = {
+        "sub": 123, "other": "test"
+    }
+
+    result = synpp.run([{
+        "descriptor": ComplexStageMaster,
+        "config": config }], verbose = True, working_directory = working_directory)
+
+    assert 2 == len(result["stale"])
+
+    result = synpp.run([{
+        "descriptor": ComplexStageMaster,
+        "config": config }], verbose = True, working_directory = working_directory)
+
+    assert 1 == len(result["stale"])
+
+    # Fifth: Let's remove the sub value to raise error
+    del config["option"]["sub"]
+
+    raised = False
+
+    try:
+        synpp.run([{
+            "descriptor": ComplexStageMaster,
+            "config": config }], verbose = True, working_directory = working_directory)
+    except synpp.general.PipelineError:
+        raised = True
+
+    assert raised

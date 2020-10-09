@@ -2,6 +2,7 @@
 
 **1.2.2-dev**
 
+- Allow hierarchical configuration options
 - Devalidate stages if code has changed
 
 **1.2.2**
