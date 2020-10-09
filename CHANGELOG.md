@@ -1,6 +1,10 @@
 # CHANGELOG
 
-**1.2.2-dev**
+**Under development**
+
+- No changes yet
+
+**1.3.0**
 
 - Allow hierarchical configuration options
 - Devalidate stages if code has changed
