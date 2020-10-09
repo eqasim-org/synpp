@@ -99,13 +99,34 @@ def resolve_stage(descriptor):
     clazz = descriptor.__class__
     return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__), module_hash)
 
+def get_config_path(name, config):
+    if name in config:
+        return name
+
+def has_config_value(name, config):
+    for segment in name.split("."):
+        if segment in config:
+            config = config[segment]
+        else:
+            return False
+
+    return True
+
+def get_config_value(name, config):
+    for segment in name.split("."):
+        if segment in config:
+            config = config[segment]
+        else:
+            return None
+
+    return config
 
 def configure_stage(instance, context, config):
     config_values = {}
 
     for name, default_value in context.required_config.items():
-        if name in config:
-            config_values[name] = config[name]
+        if name in has_config_value(name, config):
+            config_values[name] = get_config_value(name, config)
         elif not type(default_value) == NoDefaultValue:
             config_values[name] = default_value
         else:
@@ -159,8 +180,8 @@ class ConfigurationContext:
         self.ephemeral_mask = []
 
     def config(self, option, default = NoDefaultValue()):
-        if option in self.base_config:
-            self.required_config[option] = self.base_config[option]
+        if has_config_value(option, self.base_config):
+            self.required_config[option] = get_config_value(option, self.base_config)
         elif not isinstance(default, NoDefaultValue):
             if option in self.required_config and not self.required_config[option] == default:
                 raise PipelineError("Got multiple default values for config option: %s" % option)
