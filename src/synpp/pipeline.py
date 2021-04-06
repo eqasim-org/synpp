@@ -792,7 +792,7 @@ def run_from_yaml(path):
             item = key
 
         definitions.append({
-            "descriptor": item, "parameters": parameters
+            "descriptor": item, "config": parameters
         })
 
     config = settings["config"] if "config" in settings else {}
