@@ -8,6 +8,8 @@ import logging
 import os, stat, errno
 import pickle
 import shutil
+from typing import Dict, List, Union, ClassVar
+from types import ModuleType
 
 import networkx as nx
 import yaml
@@ -786,26 +788,60 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
 
 def run_from_yaml(path):
-    with open(path) as f:
-        settings = yaml.load(f, Loader = yaml.SafeLoader)
+    Synpp.build_from_yml(path).run_pipeline()
 
-    definitions = []
 
-    for item in settings["run"]:
-        parameters = {}
+# Convenience class mostly for running stages individually (possibly interactively, e.g. in Jupyter)
+class Synpp:
+    def __init__(self, config: dict, working_directory: str = None, logger: logging.Logger = logging.getLogger("synpp"),
+                 definitions: List[Dict[str, Union[str, ClassVar, ModuleType]]] = None, flowchart_path: str = None,
+                 dryrun: bool = False):
+        self.config = config
+        self.working_directory = working_directory
+        self.logger = logger
+        self.definitions = definitions
+        self.flowchart_path = flowchart_path
+        self.dryrun = dryrun
 
-        if type(item) == dict:
-            key = list(item.keys())[0]
-            parameters = item[key]
-            item = key
+    def run_pipeline(self, definitions=None, rerun_required=False, dryrun=None, verbose=False, flowchart_path=None):
+        if definitions is None and self.definitions is None:
+            raise PipelineError("A list of stage definitions must be available in object or provided explicitly.")
+        elif definitions is None:
+            definitions = self.definitions
+        if dryrun is None:
+            dryrun = self.dryrun
+        return run(definitions, self.config, self.working_directory, flowchart_path=flowchart_path,
+                   dryrun=dryrun, verbose=verbose, logger=self.logger, rerun_required=rerun_required)
 
-        definitions.append({
-            "descriptor": item, "config": parameters
-        })
+    def run_single(self, descriptor, config={}, rerun_if_cached=False, dryrun=False, verbose=False):
+        return run([{'descriptor': descriptor, 'config': config}], self.config, self.working_directory,
+                   dryrun=dryrun, verbose=verbose, logger=self.logger, rerun_required=rerun_if_cached,
+                   flowchart_path=self.flowchart_path)[0]
 
-    config = settings["config"] if "config" in settings else {}
-    working_directory = settings["working_directory"] if "working_directory" in settings else None
-    flowchart_path = settings["flowchart_path"] if "flowchart_path" in settings else None
-    dryrun = settings["dryrun"] if "dryrun" in settings else False
+    @staticmethod
+    def build_from_yml(config_path):
+        with open(config_path) as f:
+            settings = yaml.load(f, Loader=yaml.SafeLoader)
 
-    run(definitions=definitions, config=config, working_directory=working_directory, flowchart_path=flowchart_path, dryrun=dryrun)
+        definitions = []
+
+        for item in settings["run"]:
+            parameters = {}
+
+            if type(item) == dict:
+                key = list(item.keys())[0]
+                parameters = item[key]
+                item = key
+
+            definitions.append({
+                "descriptor": item, "config": parameters
+            })
+
+        config = settings["config"] if "config" in settings else {}
+        working_directory = settings["working_directory"] if "working_directory" in settings else None
+        flowchart_path = settings["flowchart_path"] if "flowchart_path" in settings else None
+        dryrun = settings["dryrun"] if "dryrun" in settings else False
+
+        return Synpp(config=config, working_directory=working_directory, definitions=definitions,
+                     flowchart_path=flowchart_path, dryrun=dryrun)
+
