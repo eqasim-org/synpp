@@ -60,14 +60,11 @@ class StageInstance:
         else:
             raise RuntimeError("Stage %s does not have execute method" % self.name)
 
-def get_module_hash(module):
-    if os.path.exists(module.__file__):
-        with open(module.__file__) as f:
-            hash = hashlib.md5()
-            hash.update(f.read().encode("utf-8"))
-            return hash.hexdigest()
-
-    return None
+def get_stage_hash(module):
+    source = inspect.getsource(module)
+    hash = hashlib.md5()
+    hash.update(source.encode("utf-8"))
+    return hash.hexdigest()
 
 def resolve_stage(descriptor):
     module_hash = None
@@ -76,24 +73,24 @@ def resolve_stage(descriptor):
         try:
             # Try to get the module referenced by the string
             descriptor = importlib.import_module(descriptor)
-            module_hash = get_module_hash(descriptor)
+            module_hash = get_stage_hash(descriptor)
         except ModuleNotFoundError:
             # Not a module, but maybe a class?
             parts = descriptor.split(".")
 
             module = importlib.import_module(".".join(parts[:-1]))
-            module_hash = get_module_hash(module)
+            module_hash = get_stage_hash(module)
 
             constructor = getattr(module, parts[-1])
             descriptor = constructor()
 
     if inspect.ismodule(descriptor):
-        module_hash = get_module_hash(descriptor)
+        module_hash = get_stage_hash(descriptor)
         return StageInstance(descriptor, descriptor.__name__, module_hash)
 
     if inspect.isclass(descriptor):
         module = importlib.import_module(descriptor.__module__)
-        module_hash = get_module_hash(module)
+        module_hash = get_stage_hash(module)
         return StageInstance(descriptor(), "%s.%s" % (descriptor.__module__, descriptor.__name__), module_hash)
 
     clazz = descriptor.__class__
