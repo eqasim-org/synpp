@@ -478,7 +478,7 @@ def update_json(meta, working_directory):
     shutil.move("%s/pipeline.json.new" % working_directory, "%s/pipeline.json" % working_directory)
 
 
-def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False, logger = logging.getLogger("synpp")):
+def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False, logger = logging.getLogger("synpp"), rerun_required=True):
     # 0) Construct pipeline config
     pipeline_config = {}
     if "processes" in config: pipeline_config["processes"] = config["processes"]
@@ -578,9 +578,11 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     # 4) Devalidate stages
     sorted_cached_hashes = sorted_hashes - ephemeral_counts.keys()
+    stale_hashes = set()
 
-    # 4.1) Devalidate if they are required
-    stale_hashes = set(required_hashes)
+    # 4.1) Devalidate if they are required (optional, otherwise will reload from cache)
+    if rerun_required:
+        stale_hashes.update(required_hashes)
 
     # 4.2) Devalidate if not in meta
     for hash in sorted_cached_hashes:
@@ -590,7 +592,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     # 4.3) Devalidate if configuration values have changed
     # This devalidation step is obsolete since we have implicit config parameters
 
-    # 4.3) Devalidate if module hash of a stage has changed
+    # 4.4) Devalidate if module hash of a stage has changed
     for hash in sorted_cached_hashes:
         if hash in meta:
             if not "module_hash" in meta[hash]:
@@ -603,7 +605,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                 if previous_module_hash != current_module_hash:
                     stale_hashes.add(hash)
 
-    # 4.3) Devalidate if cache is not existant
+    # 4.5) Devalidate if cache is not existant
     if not working_directory is None:
         for hash in sorted_cached_hashes:
             directory_path = "%s/%s.cache" % (working_directory, hash)
@@ -612,7 +614,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             if not hash in cache_available:
                 stale_hashes.add(hash)
 
-    # 4.4) Devalidate if parent has been updated
+    # 4.6) Devalidate if parent has been updated
     for hash in sorted_cached_hashes:
         if not hash in stale_hashes and hash in meta:
             for dependency_hash, dependency_update in meta[hash]["dependencies"].items():
@@ -622,7 +624,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                     if meta[dependency_hash]["updated"] > dependency_update:
                         stale_hashes.add(hash)
 
-    # 4.5) Devalidate if parents are not the same anymore
+    # 4.7) Devalidate if parents are not the same anymore
     for hash in sorted_cached_hashes:
         if not hash in stale_hashes and hash in meta:
             cached_hashes = set(meta[hash]["dependencies"].keys())
@@ -631,7 +633,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             if not cached_hashes == current_hashes:
                 stale_hashes.add(hash)
 
-    # 4.6) Manually devalidate stages
+    # 4.8) Manually devalidate stages
     for hash in sorted_cached_hashes:
         stage = registry[hash]
         cache_path = "%s/%s.cache" % (working_directory, hash)
@@ -643,13 +645,13 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         if not validation_token == existing_token:
             stale_hashes.add(hash)
 
-    # 4.7) Devalidate descendants of devalidated stages
+    # 4.9) Devalidate descendants of devalidated stages
     for hash in set(stale_hashes):
         for descendant_hash in nx.descendants(graph, hash):
             if not descendant_hash in stale_hashes:
                 stale_hashes.add(descendant_hash)
 
-    # 4.8) Devalidate ephemeral stages if necessary
+    # 4.10) Devalidate ephemeral stages if necessary
     pending = set(stale_hashes)
 
     while len(pending) > 0:
@@ -758,6 +760,14 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             logger.info("Pipeline progress: %d/%d (%.2f%%)" % (
                 progress, len(stale_hashes), 100 * progress / len(stale_hashes)
             ))
+
+    if not rerun_required:
+        # Load remaining previously cached results
+        for hash in required_hashes:
+            if results[required_hashes.index(hash)] is None:
+                with open("%s/%s.p" % (working_directory, hash), "rb") as f:
+                    logger.info("Loading cache for %s ..." % hash)
+                    results[required_hashes.index(hash)] = pickle.load(f)
 
     if verbose:
         info = {}
