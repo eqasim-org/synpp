@@ -8,7 +8,7 @@ import logging
 import os, stat, errno
 import pickle
 import shutil
-from typing import Dict, List, Union, ClassVar
+from typing import Dict, List, Union, Callable
 from types import ModuleType
 
 import networkx as nx
@@ -794,7 +794,7 @@ def run_from_yaml(path):
 # Convenience class mostly for running stages individually (possibly interactively, e.g. in Jupyter)
 class Synpp:
     def __init__(self, config: dict, working_directory: str = None, logger: logging.Logger = logging.getLogger("synpp"),
-                 definitions: List[Dict[str, Union[str, ClassVar, ModuleType]]] = None, flowchart_path: str = None,
+                 definitions: List[Dict[str, Union[str, Callable, ModuleType]]] = None, flowchart_path: str = None,
                  dryrun: bool = False):
         self.config = config
         self.working_directory = working_directory
