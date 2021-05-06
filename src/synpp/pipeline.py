@@ -486,7 +486,8 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     if not working_directory is None:
         if not os.path.isdir(working_directory):
-            raise PipelineError("Working directory does not exist: %s" % working_directory)
+            logger.warning("Working directory does not exist, it will be created: %s" % working_directory)
+            os.mkdir(working_directory)
 
         working_directory = os.path.realpath(working_directory)
 
