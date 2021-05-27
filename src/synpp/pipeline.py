@@ -480,14 +480,17 @@ def update_json(meta, working_directory):
     shutil.move("%s/pipeline.json.new" % working_directory, "%s/pipeline.json" % working_directory)
 
 
-def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False, logger = logging.getLogger("synpp"), rerun_required=True):
+def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False,
+        logger = logging.getLogger("synpp"), rerun_required=True, ensure_working_directory=False):
     # 0) Construct pipeline config
     pipeline_config = {}
     if "processes" in config: pipeline_config["processes"] = config["processes"]
     if "progress_interval" in config: pipeline_config["progress_interval"] = config["progress_interval"]
 
-    if not working_directory is None:
-        if not os.path.isdir(working_directory):
+    if ensure_working_directory and working_directory is None:
+        working_directory = '.synpp_cache'
+    if working_directory is not None:
+        if not os.path.isdir(working_directory) and ensure_working_directory:
             logger.warning("Working directory does not exist, it will be created: %s" % working_directory)
             os.mkdir(working_directory)
 
@@ -811,12 +814,13 @@ class Synpp:
         if dryrun is None:
             dryrun = self.dryrun
         return run(definitions, self.config, self.working_directory, flowchart_path=flowchart_path,
-                   dryrun=dryrun, verbose=verbose, logger=self.logger, rerun_required=rerun_required)
+                   dryrun=dryrun, verbose=verbose, logger=self.logger, rerun_required=rerun_required,
+                   ensure_working_directory=True)
 
     def run_single(self, descriptor, config={}, rerun_if_cached=False, dryrun=False, verbose=False):
         return run([{'descriptor': descriptor, 'config': config}], self.config, self.working_directory,
                    dryrun=dryrun, verbose=verbose, logger=self.logger, rerun_required=rerun_if_cached,
-                   flowchart_path=self.flowchart_path)[0]
+                   flowchart_path=self.flowchart_path, ensure_working_directory=True)[0]
 
     @staticmethod
     def build_from_yml(config_path):
