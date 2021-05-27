@@ -2,7 +2,9 @@
 
 **Under development**
 
-- No changes yet
+- Added a wrapper class for interactive use, e.g. in Jupyter
+- Devalidation less sensible for class-stages
+- Added option to load required stages directly from cache without devalidating
 
 **1.3.1**
 
