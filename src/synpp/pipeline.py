@@ -3,6 +3,7 @@ import datetime
 import hashlib
 import importlib
 import inspect
+import functools
 import json
 import logging
 import os, stat, errno
@@ -10,6 +11,7 @@ import pickle
 import shutil
 from typing import Dict, List, Union, Callable
 from types import ModuleType
+import sys
 
 import networkx as nx
 import yaml
@@ -61,6 +63,7 @@ class StageInstance:
     def execute(self, context):
         return self.instance.execute(context)
 
+
 def get_stage_hash(descriptor):
     source = inspect.getsource(descriptor)
     hash = hashlib.md5()
@@ -68,22 +71,15 @@ def get_stage_hash(descriptor):
     return hash.hexdigest()
 
 def resolve_stage(descriptor):
-    stage_hash = None
-
+    # Supported descriptors: module, class, class-instance or @Stage-decorated function
     if isinstance(descriptor, str):
+        # If a string, first try to get the actual object
         try:
-            # Try to get the module referenced by the string
             descriptor = importlib.import_module(descriptor)
-            stage_hash = get_stage_hash(descriptor)
         except ModuleNotFoundError:
-            # Not a module, but maybe a class?
             parts = descriptor.split(".")
-
             module = importlib.import_module(".".join(parts[:-1]))
-            stage_hash = get_stage_hash(module)
-
-            constructor = getattr(module, parts[-1])
-            descriptor = constructor()
+            descriptor = getattr(module, parts[-1])
 
     if inspect.ismodule(descriptor):
         stage_hash = get_stage_hash(descriptor)
@@ -93,8 +89,21 @@ def resolve_stage(descriptor):
         stage_hash = get_stage_hash(descriptor)
         return StageInstance(descriptor(), "%s.%s" % (descriptor.__module__, descriptor.__name__), stage_hash)
 
-    clazz = descriptor.__class__
-    return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__), stage_hash)
+    if inspect.isfunction(descriptor):
+        if not hasattr(descriptor, 'stage_params'):
+            raise PipelineError("Functions need to be decorated with @synpp.stage in order to be used in the pipeline.")
+        function_stage = DecoratedStage(execute_func=descriptor, stage_params=descriptor.stage_params)
+        stage_hash = get_stage_hash(descriptor)
+        return StageInstance(function_stage, "%s.%s" % (descriptor.__module__, descriptor.__name__), stage_hash)
+
+    if hasattr(descriptor, 'execute'):
+        # Last option: arbitrary object which looks like a stage
+        clazz = descriptor.__class__
+        stage_hash = get_stage_hash(clazz)
+        return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__), stage_hash)
+
+    # couldn't resolve stage (this is something else)
+    return None
 
 def get_config_path(name, config):
     if name in config:
@@ -322,6 +331,8 @@ def process_stages(definitions, global_config):
 
         # Resolve the underlying code of the stage
         wrapper = resolve_stage(definition["descriptor"])
+        if wrapper is None:
+            raise PipelineError(f"{definition['descriptor']} is not a supported object for pipeline stage definition!")
 
         # Call the configure method of the stage and obtain parameters
         config = copy.copy(global_config)
