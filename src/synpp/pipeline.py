@@ -71,7 +71,7 @@ def get_stage_hash(descriptor):
     return hash.hexdigest()
 
 def resolve_stage(descriptor):
-    # Supported descriptors: module, class, class-instance or @Stage-decorated function
+    # Supported descriptors: module, class, @stage-decorated function or stage-looking object
     if isinstance(descriptor, str):
         # If a string, first try to get the actual object
         try:
