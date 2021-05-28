@@ -42,6 +42,8 @@ class StageInstance:
         self.instance = instance
         self.name = name
         self.module_hash = module_hash
+        if not hasattr(self.instance, "execute"):
+            raise RuntimeError("Stage %s does not have execute method" % self.name)
 
     def parameterize(self, parameters):
         return ParameterizedStage(self.instance, self.name)
@@ -57,10 +59,7 @@ class StageInstance:
         return None
 
     def execute(self, context):
-        if hasattr(self.instance, "execute"):
-            return self.instance.execute(context)
-        else:
-            raise RuntimeError("Stage %s does not have execute method" % self.name)
+        return self.instance.execute(context)
 
 def get_stage_hash(descriptor):
     source = inspect.getsource(descriptor)
