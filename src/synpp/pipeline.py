@@ -848,3 +848,41 @@ class Synpp:
         return Synpp(config=config, working_directory=working_directory, definitions=definitions,
                      flowchart_path=flowchart_path, dryrun=dryrun)
 
+
+def stage(**kwargs):
+    def decorator(func):
+        functools.wraps(func)
+        func.stage_params = kwargs
+        return func
+    return decorator
+
+
+class DecoratedStage:
+    def __init__(self, execute_func: Callable, stage_params: dict):
+        self.execute_func = execute_func
+        self.stage_params = stage_params
+
+    def configure(self, context):
+        self._resolve_params(context)
+
+    def execute(self, context):
+        kwargs = self._resolve_params(context)
+        return self.execute_func(**kwargs)
+
+    def _resolve_params(self, context):
+        func_kwargs = {}
+        for k, v in self.stage_params.items():
+            # Definition in dictionary format {'descriptor': descriptor, 'config': {'con': fig}}
+            if isinstance(v, dict) and v.get('descriptor') is not None:
+                func_kwargs[k] = context.stage(v.get('descriptor'), v.get('config'))
+            elif isinstance(v, dict) and v.get('config') is not None:
+                args = [v.get('config')] + ([v.get('default')] if isinstance(context, ConfigurationContext) else [])
+                func_kwargs[k] = context.config(*args)
+            else:
+                # Decide whether this is a config parameter or a config-less stage
+                stage = resolve_stage(v)
+                if stage is not None:
+                    func_kwargs[k] = context.stage(stage)
+                else:
+                    func_kwargs[k] = context.config(v)
+        return func_kwargs
