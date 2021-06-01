@@ -39,7 +39,7 @@ A typical chain of stages could, for instance, be: **(C1)** load raw census data
 
 In *synpp* each *stage* is defined by:
 
-* A *descriptor*, which can be a Python module, a class or a class instance, or a string referencing a module or class.
+* A *descriptor*, which can be a Python module, a class or a class instance, or a string referencing a module or class. A function can also be passed, if *converted* to a stage with the `@synpp.stage(**stage_kwargs)` decorator (an example can be found in the [relative test](tests/test_run_stages.py#L74)).
 * *Configuration options* that parameterize each *stage*.
 
 The most common form of a *stage* is a Python module. A full stage would look
@@ -172,9 +172,9 @@ parameters.
 After constructing a tree of *stages*, *synpp* devalidates some of them according
 to the following scheme. A *stage* is devalidated if ...
 
-- ... it is requested by the `run` call
+- ... it is requested by the `run` call (and `rerun_required` is set to `True`, the default)
 - ... it is new (no meta data from a previous call is present)
-- ... the code of the containing file has changed
+- ... the code of the stage has changed (verified with inspection)
 - ... if at least one of the requested configuration options has changed
 - ... if at least one dependency has been re-run since the last run of the stage
 - ... if list of dependencies has changed
