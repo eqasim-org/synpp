@@ -3,6 +3,7 @@ import datetime
 import hashlib
 import importlib
 import inspect
+import functools
 import json
 import logging
 import os, stat, errno
@@ -10,6 +11,7 @@ import pickle
 import shutil
 from typing import Dict, List, Union, Callable
 from types import ModuleType
+import sys
 
 import networkx as nx
 import yaml
@@ -42,6 +44,8 @@ class StageInstance:
         self.instance = instance
         self.name = name
         self.module_hash = module_hash
+        if not hasattr(self.instance, "execute"):
+            raise RuntimeError("Stage %s does not have execute method" % self.name)
 
     def parameterize(self, parameters):
         return ParameterizedStage(self.instance, self.name)
@@ -57,10 +61,8 @@ class StageInstance:
         return None
 
     def execute(self, context):
-        if hasattr(self.instance, "execute"):
-            return self.instance.execute(context)
-        else:
-            raise RuntimeError("Stage %s does not have execute method" % self.name)
+        return self.instance.execute(context)
+
 
 def get_stage_hash(descriptor):
     source = inspect.getsource(descriptor)
@@ -69,22 +71,15 @@ def get_stage_hash(descriptor):
     return hash.hexdigest()
 
 def resolve_stage(descriptor):
-    stage_hash = None
-
+    # Supported descriptors: module, class, @stage-decorated function or stage-looking object
     if isinstance(descriptor, str):
+        # If a string, first try to get the actual object
         try:
-            # Try to get the module referenced by the string
             descriptor = importlib.import_module(descriptor)
-            stage_hash = get_stage_hash(descriptor)
         except ModuleNotFoundError:
-            # Not a module, but maybe a class?
             parts = descriptor.split(".")
-
             module = importlib.import_module(".".join(parts[:-1]))
-            stage_hash = get_stage_hash(module)
-
-            constructor = getattr(module, parts[-1])
-            descriptor = constructor()
+            descriptor = getattr(module, parts[-1])
 
     if inspect.ismodule(descriptor):
         stage_hash = get_stage_hash(descriptor)
@@ -94,8 +89,21 @@ def resolve_stage(descriptor):
         stage_hash = get_stage_hash(descriptor)
         return StageInstance(descriptor(), "%s.%s" % (descriptor.__module__, descriptor.__name__), stage_hash)
 
-    clazz = descriptor.__class__
-    return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__), stage_hash)
+    if inspect.isfunction(descriptor):
+        if not hasattr(descriptor, 'stage_params'):
+            raise PipelineError("Functions need to be decorated with @synpp.stage in order to be used in the pipeline.")
+        function_stage = DecoratedStage(execute_func=descriptor, stage_params=descriptor.stage_params)
+        stage_hash = get_stage_hash(descriptor)
+        return StageInstance(function_stage, "%s.%s" % (descriptor.__module__, descriptor.__name__), stage_hash)
+
+    if hasattr(descriptor, 'execute'):
+        # Last option: arbitrary object which looks like a stage
+        clazz = descriptor.__class__
+        stage_hash = get_stage_hash(clazz)
+        return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__), stage_hash)
+
+    # couldn't resolve stage (this is something else)
+    return None
 
 def get_config_path(name, config):
     if name in config:
@@ -323,6 +331,8 @@ def process_stages(definitions, global_config):
 
         # Resolve the underlying code of the stage
         wrapper = resolve_stage(definition["descriptor"])
+        if wrapper is None:
+            raise PipelineError(f"{definition['descriptor']} is not a supported object for pipeline stage definition!")
 
         # Call the configure method of the stage and obtain parameters
         config = copy.copy(global_config)
@@ -849,3 +859,41 @@ class Synpp:
         return Synpp(config=config, working_directory=working_directory, definitions=definitions,
                      flowchart_path=flowchart_path, dryrun=dryrun)
 
+
+def stage(**kwargs):
+    def decorator(func):
+        functools.wraps(func)
+        func.stage_params = kwargs
+        return func
+    return decorator
+
+
+class DecoratedStage:
+    def __init__(self, execute_func: Callable, stage_params: dict):
+        self.execute_func = execute_func
+        self.stage_params = stage_params
+
+    def configure(self, context):
+        self._resolve_params(context)
+
+    def execute(self, context):
+        kwargs = self._resolve_params(context)
+        return self.execute_func(**kwargs)
+
+    def _resolve_params(self, context):
+        func_kwargs = {}
+        for k, v in self.stage_params.items():
+            # Definition in dictionary format {'descriptor': descriptor, 'config': {'con': fig}}
+            if isinstance(v, dict) and v.get('descriptor') is not None:
+                func_kwargs[k] = context.stage(v.get('descriptor'), v.get('config'))
+            elif isinstance(v, dict) and v.get('config') is not None:
+                args = [v.get('config')] + ([v.get('default')] if isinstance(context, ConfigurationContext) else [])
+                func_kwargs[k] = context.config(*args)
+            else:
+                # Decide whether this is a config parameter or a config-less stage
+                stage = resolve_stage(v)
+                if stage is not None:
+                    func_kwargs[k] = context.stage(stage)
+                else:
+                    func_kwargs[k] = context.config(v)
+        return func_kwargs

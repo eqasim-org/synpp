@@ -70,3 +70,12 @@ def test_wrapper(tmpdir):
     res = wrapper.run_pipeline(definitions=[{"descriptor": "tests.fixtures.sum_config", "config": {"a": 5, "b": 9}}])
     assert len(res) == 1
     assert 14 == res[0]
+
+def test_decorated_stage():
+    @synpp.stage(sum_result={'descriptor': "tests.fixtures.sum_config", 'config': {"a": 2, "b": 3}},
+                 factor={'config': 'factor', 'default': 2})
+    def stage_func(sum_result, factor):
+        return sum_result * factor
+
+    assert 10 == synpp.run([{"descriptor": stage_func}])[0]
+    assert 15 == synpp.run([{"descriptor": stage_func, "config": {"factor": 3}}])[0]
