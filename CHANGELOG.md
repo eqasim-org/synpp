@@ -2,6 +2,10 @@
 
 **Under development**
 
+- No changes yet
+
+**1.4.0**
+
 - Running functions as stages now possible with @synpp.stage decorator
 - Added a wrapper class for interactive use, e.g. in Jupyter
 - Devalidation less sensible for class-stages
