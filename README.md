@@ -20,7 +20,7 @@ The `synpp` package releases can be installed via `pip`:
 pip install synpp
 ```
 
-Currently, version `1.3.0` is the active release version. Alternatively, you can
+Currently, version `1.4.0` is the active release version. Alternatively, you can
 clone the `develop` branch of this repository to use the development version.
 It can be installed by calling
 
