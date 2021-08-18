@@ -34,6 +34,8 @@ class ProgressTracker:
 
     def report(self):
         current_time = time.time()
+        if current_time == self.start_time:
+            current_time = current_time + 1
         message = []
 
         if not self.label is None:
