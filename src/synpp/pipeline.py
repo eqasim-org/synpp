@@ -182,6 +182,7 @@ class ConfiguredStage:
 class ConfigurationContext:
     def __init__(self, base_config):
         self.base_config = base_config
+        self.config_requested_stages = [resolve_stage(d).instance for d in config_definitions]
 
         self.required_config = {}
 
@@ -215,6 +216,9 @@ class ConfigurationContext:
 
             if not alias is None:
                 self.aliases[alias] = definition
+
+    def stage_is_config_requested(self, descriptor):
+        return resolve_stage(descriptor).instance in self.config_requested_stages
 
 
 class ValidateContext:
@@ -345,7 +349,7 @@ def process_stages(definitions, global_config):
             config.update(definition["config"])
 
         # Obtain configuration information through configuration context
-        context = ConfigurationContext(config)
+        context = ConfigurationContext(config, [d['descriptor'] for d in definitions])
         wrapper.configure(context)
 
         definition = copy.copy(definition)
