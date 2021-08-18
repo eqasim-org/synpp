@@ -179,8 +179,12 @@ class ConfiguredStage:
         return self.instance.validate(context)
 
 
-class ConfigurationContext:
-    def __init__(self, base_config):
+class Context:
+    pass
+
+
+class ConfigurationContext(Context):
+    def __init__(self, base_config, config_definitions):
         self.base_config = base_config
         self.config_requested_stages = [resolve_stage(d).instance for d in config_definitions]
 
@@ -221,7 +225,7 @@ class ConfigurationContext:
         return resolve_stage(descriptor).instance in self.config_requested_stages
 
 
-class ValidateContext:
+class ValidateContext(Context):
     def __init__(self, required_config, cache_path):
         self.required_config = required_config
         self.cache_path = cache_path
@@ -236,7 +240,7 @@ class ValidateContext:
         return self.cache_path
 
 
-class ExecuteContext:
+class ExecuteContext(Context):
     def __init__(self, required_config, required_stages, aliases, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info):
         self.required_config = required_config
         self.working_directory = working_directory
@@ -874,6 +878,16 @@ def stage(**kwargs):
         func.stage_params = kwargs
         return func
     return decorator
+
+
+def get_context():
+    stack = list(frame for frame in inspect.stack())
+    for frame in stack:
+        f_locals = dict(frame.frame.f_locals)
+        for name, obj in f_locals.items():
+            if name == 'context' and isinstance(obj, Context):
+                return obj
+    return None
 
 
 class DecoratedStage:
