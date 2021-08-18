@@ -183,7 +183,7 @@ class Context:
 
 
 class ConfigurationContext(Context):
-    def __init__(self, base_config, config_definitions):
+    def __init__(self, base_config, config_definitions=[]):
         self.base_config = base_config
         self.config_requested_stages = [resolve_stage(d).instance for d in config_definitions]
 
@@ -221,7 +221,10 @@ class ConfigurationContext(Context):
                 self.aliases[alias] = definition
 
     def stage_is_config_requested(self, descriptor):
-        return resolve_stage(descriptor).instance in self.config_requested_stages
+        if self.config_requested_stages:
+            return resolve_stage(descriptor).instance in self.config_requested_stages
+        else:
+            return False
 
 
 class ValidateContext(Context):
