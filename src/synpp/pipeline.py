@@ -11,7 +11,6 @@ import pickle
 import shutil
 from typing import Dict, List, Union, Callable
 from types import ModuleType
-import sys
 
 import networkx as nx
 import yaml
@@ -872,12 +871,26 @@ class Synpp:
                      flowchart_path=flowchart_path, dryrun=dryrun)
 
 
-def stage(**kwargs):
-    def decorator(func):
-        functools.wraps(func)
-        func.stage_params = kwargs
-        return func
-    return decorator
+def stage(function=None, *args, **kwargs):
+    def decorator(_func):
+        functools.wraps(_func)
+        _func.stage_params = kwargs
+        return _func
+
+    # parameterized decorator
+    if function is None:
+        return decorator
+    # parameterized decorator where a non-function stage is passed
+    # this should be used like @stage(arg=stage("path.stage"))
+    elif not inspect.isfunction(function):
+        stage = resolve_stage(function)
+        if stage is not None:
+            stage.instance.stage_params = kwargs
+            return stage.instance
+        else:
+            raise PipelineError(f'{function} could not be resolved as a stage.')
+    else:  # unparameterized decorator
+        return decorator(function)
 
 
 def get_context():
@@ -894,28 +907,49 @@ class DecoratedStage:
     def __init__(self, execute_func: Callable, stage_params: dict):
         self.execute_func = execute_func
         self.stage_params = stage_params
+        self.func_params = inspect.signature(self.execute_func).parameters
 
     def configure(self, context):
         self._resolve_params(context)
 
     def execute(self, context):
-        kwargs = self._resolve_params(context)
-        return self.execute_func(**kwargs)
+        return self.execute_func(**self._resolve_params(context))
 
     def _resolve_params(self, context):
+        """
+        This function is used both when configuring a stage as well as collecting the kwargs for execution.
+        Stages may be decorated in three different ways:
+        1. simple decoration:
+                @synpp.stage
+                def foo(bar='baz'): ...
+            Which will look for 'bar' in the global context config (or else use the method's default if available).
+        2. parameterized decoration:
+                @synpp.stage(bar='bar_pipeline')
+                def foo(bar): ...
+            Which will try to decide whether:
+             a. 'bar_pipeline' is an available stage, and pass the method its results, or
+             b. an argument in the global context config (or else use the method's default if available).
+             Note: the default value for 'bar' must be set in the actual function, not in the decorator.
+        3. fully parameterized decoration, which can be used for configuring the stage dependencies:
+                @synpp.stage(bar=synpp.stage('pipeline.bar', bar_argkey='bar_argval'))
+                def foo(bar): ...
+            Using synpp.stage() inside the decorator works in the same way as the decorator itself, simply pass the
+            target stage as first argument, and the config kwargs following it.
+        """
         func_kwargs = {}
-        for k, v in self.stage_params.items():
-            # Definition in dictionary format {'descriptor': descriptor, 'config': {'con': fig}}
-            if isinstance(v, dict) and v.get('descriptor') is not None:
-                func_kwargs[k] = context.stage(v.get('descriptor'), v.get('config'))
-            elif isinstance(v, dict) and v.get('config') is not None:
-                args = [v.get('config')] + ([v.get('default')] if isinstance(context, ConfigurationContext) else [])
-                func_kwargs[k] = context.config(*args)
+        for name, param in self.func_params.items():
+            arg = self.stage_params.get(name)
+            if arg is None:
+                # case 1: simple decoration
+                config_kwargs = {'option': name}
+                if isinstance(context, ConfigurationContext) and param.default is not inspect._empty:
+                    config_kwargs.update({'default': param.default})
+                func_kwargs[name] = context.config(**config_kwargs)
+            elif resolve_stage(arg) is not None:
+                # case 2 or 3: stages only
+                func_kwargs[name] = context.stage(arg, config=getattr(arg, 'stage_params', {}))
             else:
-                # Decide whether this is a config parameter or a config-less stage
-                stage = resolve_stage(v)
-                if stage is not None:
-                    func_kwargs[k] = context.stage(stage)
-                else:
-                    func_kwargs[k] = context.config(v)
+                # case 2: config parameter
+                func_kwargs[name] = context.config(arg)
+
         return func_kwargs
