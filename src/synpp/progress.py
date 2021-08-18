@@ -25,6 +25,7 @@ class ProgressTracker:
         self.label = label
 
     def update(self, amount = 1):
+        amount = max(amount, 1)
         self.value += amount
         current_time = time.time()
 
