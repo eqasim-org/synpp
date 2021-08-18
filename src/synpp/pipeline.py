@@ -70,6 +70,7 @@ def get_stage_hash(descriptor):
     hash.update(source.encode("utf-8"))
     return hash.hexdigest()
 
+
 def resolve_stage(descriptor):
     # Supported descriptors: module, class, @stage-decorated function or stage-looking object
     if isinstance(descriptor, str):
@@ -77,9 +78,12 @@ def resolve_stage(descriptor):
         try:
             descriptor = importlib.import_module(descriptor)
         except ModuleNotFoundError:
-            parts = descriptor.split(".")
-            module = importlib.import_module(".".join(parts[:-1]))
-            descriptor = getattr(module, parts[-1])
+            try:
+                parts = descriptor.split(".")
+                module = importlib.import_module(".".join(parts[:-1]))
+                descriptor = getattr(module, parts[-1])
+            except (ValueError, ModuleNotFoundError):
+                return None  # definitely not a stage
 
     if inspect.ismodule(descriptor):
         stage_hash = get_stage_hash(descriptor)
