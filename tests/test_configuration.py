@@ -125,3 +125,22 @@ def test_complex_config(tmpdir):
         raised = True
 
     assert raised
+
+
+class VariableInputStage:
+    def configure(self, context):
+        if context.stage_is_config_requested("tests.fixtures.devalidation.A2"):
+            context.stage("tests.fixtures.devalidation.A2", alias='A')
+        else:
+            context.stage("tests.fixtures.devalidation.A1", alias='A')
+
+    def execute(self, context):
+        return context.stage('A')
+
+
+def test_is_config_requested():
+    res1 = synpp.run([{'descriptor': VariableInputStage, 'config': {'a': 10}}])
+    res2 = synpp.run([{'descriptor': VariableInputStage, 'config': {'a': 10}},
+                      {'descriptor': "tests.fixtures.devalidation.A2"}])
+    assert res1[0] == 10
+    assert res2[0] == 5

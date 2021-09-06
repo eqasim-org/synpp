@@ -25,6 +25,7 @@ class ProgressTracker:
         self.label = label
 
     def update(self, amount = 1):
+        amount = max(amount, 1)
         self.value += amount
         current_time = time.time()
 
@@ -34,6 +35,8 @@ class ProgressTracker:
 
     def report(self):
         current_time = time.time()
+        if current_time == self.start_time:
+            current_time = current_time + 1
         message = []
 
         if not self.label is None:

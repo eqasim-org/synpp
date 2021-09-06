@@ -20,3 +20,9 @@ def test_resolve_module_string():
 
 def test_resolve_class_string():
     assert synpp.resolve_stage("tests.fixtures.fixture_stage.SubStage").execute(None) == "result"
+
+def test_resolve_decorated_function():
+    @synpp.stage
+    def stage_func():
+        return "result"
+    assert synpp.resolve_stage(stage_func).execute(None) == "result"

@@ -71,11 +71,23 @@ def test_wrapper(tmpdir):
     assert len(res) == 1
     assert 14 == res[0]
 
-def test_decorated_stage():
-    @synpp.stage(sum_result={'descriptor': "tests.fixtures.sum_config", 'config': {"a": 2, "b": 3}},
-                 factor={'config': 'factor', 'default': 2})
-    def stage_func(sum_result, factor):
+def test_decorated_stage_unparameterized():
+    @synpp.stage
+    def stage_func(sum_result=5, factor=2):
         return sum_result * factor
 
     assert 10 == synpp.run([{"descriptor": stage_func}])[0]
-    assert 15 == synpp.run([{"descriptor": stage_func, "config": {"factor": 3}}])[0]
+    assert 15 == synpp.run([{"descriptor": stage_func}], config={"factor": 3})[0]
+
+def test_decorated_stage_parameterized():
+    @synpp.stage(sum_result="tests.fixtures.sum_config", factor='factor_config')
+    def stage_func(sum_result, factor=2):
+        return sum_result * factor
+
+    assert 15 == synpp.run([{"descriptor": stage_func}], config={"factor_config": 3, "a": 2, "b": 3})[0]
+
+def test_decorated_stage_fullyparameterized():
+    @synpp.stage(sum_result=synpp.stage("tests.fixtures.sum_config", a=2, b=3), factor=synpp.stage(lambda: 3))
+    def stage_func(sum_result, factor=2):
+        return sum_result * factor
+    assert 15 == synpp.run([{"descriptor": stage_func}])[0]
