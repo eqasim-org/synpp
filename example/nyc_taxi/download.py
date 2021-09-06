@@ -39,11 +39,6 @@ class DownloadProgress:
     """
     def __init__(self, progress):
         self.progress = progress
-        self.initialized = False
 
     def __call__(self, count, block_size, total_size):
-        if not self.initialized:
-            self.progress.reset(total = total_size)
-
-        self.initialized = True
         self.progress.update(block_size)
