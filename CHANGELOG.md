@@ -2,7 +2,11 @@
 
 **Under development**
 
-- Information of which stages are requested in config now available in context, 
+- No changes yet
+
+**1.5.0**
+
+- Information of which stages are requested in config now available in context,
 which allows improved handling of optional stages
 - Decorated stages improved and better documented
 
