@@ -20,7 +20,7 @@ The `synpp` package releases can be installed via `pip`:
 pip install synpp
 ```
 
-Currently, version `1.4.0` is the active release version. Alternatively, you can
+Currently, version `1.5.0` is the active release version. Alternatively, you can
 clone the `develop` branch of this repository to use the development version.
 It can be installed by calling
 
@@ -39,7 +39,7 @@ A typical chain of stages could, for instance, be: **(C1)** load raw census data
 
 In *synpp* each *stage* is defined by:
 
-* A *descriptor*, which contains the stage logic. 
+* A *descriptor*, which contains the stage logic.
 * *Configuration options* that parameterize each *stage*.
 
 ### Defining a descriptor
@@ -47,8 +47,8 @@ In *synpp* each *stage* is defined by:
 A descriptor can be defined in its compact form or in its full form.
 Both work in the same way and can be used interchangeably in most cases.
 
-In this readme the full form is preferred to explain each of `synpp`'s feature as it is more expressive, 
-but towards the end a closer look at the compact form is also provided. 
+In this readme the full form is preferred to explain each of `synpp`'s feature as it is more expressive,
+but towards the end a closer look at the compact form is also provided.
 
 A descriptor in its full form looks like:  
 
@@ -63,9 +63,9 @@ def validate(context):
   pass
 ```
 
-These functions are provided in a Python object, such as a module, 
+These functions are provided in a Python object, such as a module,
 a class or a class's instance.
-`synpp` expects either a String containing the path to the object, 
+`synpp` expects either a String containing the path to the object,
 such as "pkg.subpkg.module", or the instantiated object directly.  
 
 In its compact form, the stage is defined as a function, and looks like:
@@ -76,7 +76,7 @@ def stage_to_run():
   pass
 ```
 
-Where the `@stage` decorator informs `synpp` that it should handle 
+Where the `@stage` decorator informs `synpp` that it should handle
 this function as a stage and how it should do it.
 
 ### Configuration and Parameterization
@@ -343,9 +343,9 @@ def execute(context):
 
 ### Compact stage definition
 
-As quickly [introduced before](#defining-a-descriptor), stages can also be defined in a compact form. 
+As quickly [introduced before](#defining-a-descriptor), stages can also be defined in a compact form.
 The example offered is the simplest possible, where a stage takes no configuration parameters.
-Consider now the more elaborate setting: 
+Consider now the more elaborate setting:
 
 ```python
 @synpp.stage(loaded_census="my.pipeline.census.raw", sample_size="census_sample_size")
@@ -353,9 +353,9 @@ def clean_census(loaded_census, sample_size=0.1):
     ...
 ```
 
-When `synpp` sees `clean_census`, it will under the hood convert it to a stage in its full form. 
-Basically `@synpp.stage` says how the stage should be configured and the function defines the stage's logic. 
-To put clearly, the stage above is converted by `synpp` to something like: 
+When `synpp` sees `clean_census`, it will under the hood convert it to a stage in its full form.
+Basically `@synpp.stage` says how the stage should be configured and the function defines the stage's logic.
+To put clearly, the stage above is converted by `synpp` to something like:
 
 ```python
 def configure(context):
@@ -368,17 +368,17 @@ def execute(context):
   return clean_census(loaded_census, sample_size)
 ```
 
-As you may have noticed, `census_sample_size` is a config option defined in the config file, 
-and in case it isn't found, `synpp` will simply use the function's default. 
-Notice also that the following wouldn't work: `@synpp.stage(..., sample_size=0.2)`, 
+As you may have noticed, `census_sample_size` is a config option defined in the config file,
+and in case it isn't found, `synpp` will simply use the function's default.
+Notice also that the following wouldn't work: `@synpp.stage(..., sample_size=0.2)`,
 since `synpp` would try to find a parameter called "0.2" in the config file that doesn't exist.
 
-In case a parameterized stage must be passed as dependency, this can be performed 
-in a similar way, by simply wrapping the stage in the `synpp.stage()` decorator. 
-Following the previous example, we may replace the first argument with 
-`loaded_census=synpp.stage("my.pipeline.census.raw", file_path="path/to/alternative/census")`. 
+In case a parameterized stage must be passed as dependency, this can be performed
+in a similar way, by simply wrapping the stage in the `synpp.stage()` decorator.
+Following the previous example, we may replace the first argument with
+`loaded_census=synpp.stage("my.pipeline.census.raw", file_path="path/to/alternative/census")`.
 
-This compact way of defining stages does not support all functionality, for instance custom stage devalidation, 
+This compact way of defining stages does not support all functionality, for instance custom stage devalidation,
 but functionality that requires the context object are also possible via the helper method `synpp.get_context()`.   
 
 ### Command-line tool
