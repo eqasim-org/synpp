@@ -1,3 +1,5 @@
+import importlib
+import sys
 import synpp
 
 def test_without_externals(tmpdir):
@@ -14,10 +16,14 @@ def test_without_externals(tmpdir):
 
 def test_with_a(tmpdir):
     working_directory = tmpdir.mkdir("sub")
-
+    
     externals = {
         "tests.fixtures.downstream.chain_a": "./tests/fixtures/externals/external_a.py"
     }
+
+    for key in ["tests.fixtures.downstream.chain_a", "tests.fixtures.downstream.chain_b"]:
+        if key in sys.modules:
+            del sys.modules[key]
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.downstream.chain_d"
@@ -35,6 +41,10 @@ def test_with_b(tmpdir):
         "tests.fixtures.downstream.chain_b": "./tests/fixtures/externals/external_b.py"
     }
 
+    for key in ["tests.fixtures.downstream.chain_a", "tests.fixtures.downstream.chain_b"]:
+        if key in sys.modules:
+            del sys.modules[key]
+
     result = synpp.run([{
         "descriptor": "tests.fixtures.downstream.chain_d"
     }], working_directory = working_directory, verbose = True, externals=externals)
@@ -46,11 +56,15 @@ def test_with_b(tmpdir):
 
 def test_with_a_b(tmpdir):
     working_directory = tmpdir.mkdir("sub")
-
+    
     externals = {
         "tests.fixtures.downstream.chain_a": "./tests/fixtures/externals/external_a.py",
         "tests.fixtures.downstream.chain_b": "./tests/fixtures/externals/external_b.py"
     }
+
+    for key in ["tests.fixtures.downstream.chain_a", "tests.fixtures.downstream.chain_b"]:
+        if key in sys.modules:
+            del sys.modules[key]
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.downstream.chain_d"

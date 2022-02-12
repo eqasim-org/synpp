@@ -70,27 +70,37 @@ def get_stage_hash(descriptor):
     hash.update(source.encode("utf-8"))
     return hash.hexdigest()
 
+def synpp_import_module(name, package=None, externals={}):
+    
+    absolute_name = importlib.util.resolve_name(name, package)
+    try:
+        return sys.modules[absolute_name]
+    except KeyError:
+        pass
+    
+    if absolute_name in externals:
+        spec = importlib.util.spec_from_file_location(absolute_name, externals[absolute_name])
+    else:
+        spec = importlib.util.find_spec(absolute_name)
+        if spec is None:
+            msg = f'No module named {absolute_name!r}'
+            raise ModuleNotFoundError(msg, name=absolute_name)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[absolute_name] = module
+    spec.loader.exec_module(module)
+    return module
+
 
 def resolve_stage(descriptor, externals: dict = {}):
     # Supported descriptors: module, class, @stage-decorated function or stage-looking object
     if isinstance(descriptor, str):
         # If a string, first try to get the actual object
         try:
-            if descriptor in sys.modules:
-                descriptor = sys.modules[descriptor]
-            else:
-                if descriptor in externals:
-                    spec = importlib.util.spec_from_file_location(descriptor, externals[descriptor])
-                else:
-                    spec = importlib.util.find_spec(descriptor)
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[descriptor] = module
-                spec.loader.exec_module(module)
-                descriptor = module
+            descriptor = synpp_import_module(descriptor, externals=externals)
         except ModuleNotFoundError:
             try:
                 parts = descriptor.split(".")
-                module = importlib.import_module(".".join(parts[:-1]))
+                module = synpp_import_module(".".join(parts[:-1]), externals=externals)
                 descriptor = getattr(module, parts[-1])
             except (ValueError, ModuleNotFoundError):
                 return None  # definitely not a stage
