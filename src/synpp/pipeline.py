@@ -7,7 +7,7 @@ import inspect
 import functools
 import json
 import logging
-import os, stat, errno
+import os, stat, errno, sys
 import pickle
 import shutil
 from typing import Dict, List, Union, Callable
@@ -76,12 +76,17 @@ def resolve_stage(descriptor, externals: dict = {}):
     if isinstance(descriptor, str):
         # If a string, first try to get the actual object
         try:
-            if descriptor in externals:
-                spec = importlib.util.spec_from_file_location(descriptor, externals[descriptor])
+            if descriptor in sys.modules:
+                descriptor = sys.modules[descriptor]
             else:
-                spec = importlib.util.find_spec(descriptor)
-            descriptor = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(descriptor)
+                if descriptor in externals:
+                    spec = importlib.util.spec_from_file_location(descriptor, externals[descriptor])
+                else:
+                    spec = importlib.util.find_spec(descriptor)
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[descriptor] = module
+                spec.loader.exec_module(module)
+                descriptor = module
         except ModuleNotFoundError:
             try:
                 parts = descriptor.split(".")
