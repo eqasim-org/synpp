@@ -3,14 +3,9 @@ import synpp
 def test_devalidate_by_downstream_config(tmpdir):
     working_directory = tmpdir.mkdir("sub")
 
-    externals = {
-        "tests.fixtures.downstream.chain_a": "C:\\Users\\lebescond\\Desktop\\synpp_external\\a.py",
-        "tests.fixtures.downstream.chain_b": "C:\\Users\\lebescond\\Desktop\\synpp_external\\b.py"
-    }
-
     result = synpp.run([{
         "descriptor": "tests.fixtures.downstream.chain_d"
-    }], working_directory = working_directory, verbose = True, externals=externals)
+    }], working_directory = working_directory, verbose = True)
 
     for x in result["stale"]:
         print(x)
