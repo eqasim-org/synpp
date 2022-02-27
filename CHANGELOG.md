@@ -2,7 +2,7 @@
 
 **Under development**
 
-- No changes yet
+- Add *externals* support
 
 **1.5.0**
 

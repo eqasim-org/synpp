@@ -5,3 +5,4 @@ dist
 src/synpp.egg-info
 .idea/
 .synpp_cache
+.vscode/
