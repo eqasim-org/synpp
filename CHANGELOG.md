@@ -2,6 +2,7 @@
 
 **Under development**
 
+- Add global stage aliases to provide drop-in replacement for existing stages
 - Add *externals* support
 
 **1.5.0**
