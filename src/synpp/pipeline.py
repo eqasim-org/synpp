@@ -71,13 +71,13 @@ def get_stage_hash(descriptor):
     return hash.hexdigest()
 
 def synpp_import_module(name, package=None, externals={}):
-    
+
     absolute_name = importlib.util.resolve_name(name, package)
     try:
         return sys.modules[absolute_name]
     except KeyError:
         pass
-    
+
     if absolute_name in externals:
         spec = importlib.util.spec_from_file_location(absolute_name, externals[absolute_name])
     else:
@@ -91,7 +91,10 @@ def synpp_import_module(name, package=None, externals={}):
     return module
 
 
-def resolve_stage(descriptor, externals: dict = {}):
+def resolve_stage(descriptor, externals: dict = {}, aliases: dict = {}):
+    if descriptor in aliases:
+        descriptor = aliases[descriptor]
+
     # Supported descriptors: module, class, @stage-decorated function or stage-looking object
     if isinstance(descriptor, str):
         # If a string, first try to get the actual object
@@ -204,9 +207,9 @@ class Context:
 
 
 class ConfigurationContext(Context):
-    def __init__(self, base_config, config_definitions=[], externals={}):
+    def __init__(self, base_config, config_definitions=[], externals={}, global_aliases={}):
         self.base_config = base_config
-        self.config_requested_stages = [resolve_stage(d, externals).instance for d in config_definitions]
+        self.config_requested_stages = [resolve_stage(d, externals, global_aliases).instance for d in config_definitions]
 
         self.required_config = {}
 
@@ -216,6 +219,7 @@ class ConfigurationContext(Context):
         self.ephemeral_mask = []
 
         self.externals = externals
+        self.global_aliases = global_aliases
 
     def config(self, option, default = NoDefaultValue()):
         if has_config_value(option, self.base_config):
@@ -245,7 +249,7 @@ class ConfigurationContext(Context):
 
     def stage_is_config_requested(self, descriptor):
         if self.config_requested_stages:
-            return resolve_stage(descriptor, self.externals).instance in self.config_requested_stages
+            return resolve_stage(descriptor, self.externals, self.global_aliases).instance in self.config_requested_stages
         else:
             return False
 
@@ -356,7 +360,7 @@ class ExecuteContext(Context):
         return self.dependencies[self.required_stages.index(definition)]
 
 
-def process_stages(definitions, global_config, externals={}):
+def process_stages(definitions, global_config, externals={}, aliases={}):
     pending = copy.copy(definitions)
     stages = []
 
@@ -367,7 +371,7 @@ def process_stages(definitions, global_config, externals={}):
         definition = pending.pop(0)
 
         # Resolve the underlying code of the stage
-        wrapper = resolve_stage(definition["descriptor"], externals)
+        wrapper = resolve_stage(definition["descriptor"], externals, aliases)
         if wrapper is None:
             raise PipelineError(f"{definition['descriptor']} is not a supported object for pipeline stage definition!")
 
@@ -529,7 +533,7 @@ def update_json(meta, working_directory):
 
 def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False,
         logger = logging.getLogger("synpp"), rerun_required=True, ensure_working_directory=False,
-        externals = {}):
+        externals = {}, aliases = {}):
     # 0) Construct pipeline config
     pipeline_config = {}
     if "processes" in config: pipeline_config["processes"] = config["processes"]
@@ -545,7 +549,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         working_directory = os.path.realpath(working_directory)
 
     # 1) Construct stage registry
-    registry = process_stages(definitions, config, externals)
+    registry = process_stages(definitions, config, externals, aliases)
 
     required_hashes = [None] * len(definitions)
     for stage in registry.values():
@@ -846,7 +850,7 @@ def run_from_yaml(path):
 class Synpp:
     def __init__(self, config: dict, working_directory: str = None, logger: logging.Logger = logging.getLogger("synpp"),
                  definitions: List[Dict[str, Union[str, Callable, ModuleType]]] = None, flowchart_path: str = None,
-                 dryrun: bool = False, externals: Dict[str, str] = {}):
+                 dryrun: bool = False, externals: Dict[str, str] = {}, aliases = {}):
         self.config = config
         self.working_directory = working_directory
         self.logger = logger
@@ -854,6 +858,7 @@ class Synpp:
         self.flowchart_path = flowchart_path
         self.dryrun = dryrun
         self.externals = externals
+        self.aliases = aliases
 
     def run_pipeline(self, definitions=None, rerun_required=False, dryrun=None, verbose=False, flowchart_path=None):
         if definitions is None and self.definitions is None:
@@ -864,12 +869,13 @@ class Synpp:
             dryrun = self.dryrun
         return run(definitions, self.config, self.working_directory, flowchart_path=flowchart_path,
                    dryrun=dryrun, verbose=verbose, logger=self.logger, rerun_required=rerun_required,
-                   ensure_working_directory=True, externals=self.externals)
+                   ensure_working_directory=True, externals=self.externals, aliases=self.aliases)
 
     def run_single(self, descriptor, config={}, rerun_if_cached=False, dryrun=False, verbose=False):
         return run([{'descriptor': descriptor, 'config': config}], self.config, self.working_directory,
                    dryrun=dryrun, verbose=verbose, logger=self.logger, rerun_required=rerun_if_cached,
-                   flowchart_path=self.flowchart_path, ensure_working_directory=True, externals=self.externals)[0]
+                   flowchart_path=self.flowchart_path, ensure_working_directory=True, externals=self.externals,
+                   aliases=self.aliases)[0]
 
     @staticmethod
     def build_from_yml(config_path):
@@ -895,9 +901,10 @@ class Synpp:
         flowchart_path = settings["flowchart_path"] if "flowchart_path" in settings else None
         dryrun = settings["dryrun"] if "dryrun" in settings else False
         externals = settings["externals"] if "externals" in settings else {}
+        aliases = settings["aliases"] if "aliases" in settings else {}
 
         return Synpp(config=config, working_directory=working_directory, definitions=definitions,
-                     flowchart_path=flowchart_path, dryrun=dryrun, externals=externals)
+                     flowchart_path=flowchart_path, dryrun=dryrun, externals=externals, aliases=aliases)
 
 
 def stage(function=None, *args, **kwargs):

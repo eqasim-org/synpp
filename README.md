@@ -265,6 +265,23 @@ have been defined as dependencies before. Note that the pipeline cannot enforce
 that one stage is not corrupting the cache path of another stage. Therefore,
 by convention, a stage should never *write* to the cache path of another stage.
 
+### Aliases
+
+Once a pipeline has been defined, the structure is relatively rigid as stages
+are referenced by their names. To provide more flexibility, it is possible to
+define aliases, for instance:
+
+```python
+synpp.run(..., aliases = {
+  "my.pipeline.final_population": "my.pipeline.final_population_replacement"
+})
+```
+
+Whenever `my.pipeline.final_population` is requested, `my.pipeline.final_population_replacement`
+will be used instead. Note that this allows to define entirely virtual stages that
+are referenced from other stages and which are only bound to a specific execution
+stage when running the pipeline (see example above).
+
 ### Parallel execution
 
 The *synpp* package comes with some simplified ways of parallelizing code,
@@ -410,7 +427,8 @@ config:
 
 It receives the working directory, a list of stages (which may be parameterized)
 and all configuration options. The stages listed above should be available
-as Python modules or classes.
+as Python modules or classes. Furthermore, `aliases` can be defined as a top-level
+element of the file.
 
 ## NYC Taxi Example
 
