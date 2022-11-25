@@ -66,9 +66,9 @@ class ProgressTracker:
 class ProgressServer(threading.Thread):
     def __init__(self, tracker):
         threading.Thread.__init__(self)
-        context = zmq.Context()
+        self.context = zmq.Context()
 
-        self.socket = context.socket(zmq.PULL)
+        self.socket = self.context.socket(zmq.PULL)
         self.port = self.socket.bind_to_random_port("tcp://*")
         self.running = True
 
@@ -90,6 +90,10 @@ class ProgressServer(threading.Thread):
 
     def stop(self):
         self.running = False
+        time.sleep(0.001)
+
+        self.socket.close()
+        self.context.term()
 
 class ProgressClient:
     def __init__(self, port):

@@ -2,6 +2,7 @@
 
 **Under development**
 
+- Fix: Gracefully close zmq Context and Socket at progress server close
 - Add global stage aliases to provide drop-in replacement for existing stages
 - Add *externals* support
 
