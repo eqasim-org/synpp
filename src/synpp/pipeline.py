@@ -326,7 +326,7 @@ class ExecuteContext(Context):
 
         return self.dependency_info[dependency][name]
 
-    def parallel(self, data = {}, processes = None, serialize = False):
+    def parallel(self, data = {}, processes = None, serialize = False, maxtasksperchild = None):
         config = self.required_config
 
         if processes is None and "processes" in self.pipeline_config:
@@ -338,7 +338,7 @@ class ExecuteContext(Context):
             # for profiling the code.
             return ParalelMockMasterContext(data, config, self.progress_context)
         else:
-            return ParallelMasterContext(data, config, processes, self.progress_context)
+            return ParallelMasterContext(data, config, processes, self.progress_context, maxtasksperchild)
 
     def progress(self, iterable = None, label = None, total = None, minimum_interval = 1.0):
         if minimum_interval is None and "progress_interval" in self.pipeline_config:
