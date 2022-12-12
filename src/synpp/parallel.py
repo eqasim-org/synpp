@@ -47,13 +47,14 @@ class wrap_callable:
             yield (self.callable, element)
 
 class ParallelMasterContext:
-    def __init__(self, data, config, processes, progress_context):
+    def __init__(self, data, config, processes, progress_context, maxtasksperchild):
         if processes is None: processes = mp.cpu_count()
 
         self.processes = processes
         self.config = config
         self.data = data
         self.pool = None
+        self.maxtasksperchild = maxtasksperchild
 
         self.progress_context = progress_context
 
@@ -69,7 +70,8 @@ class ParallelMasterContext:
         self.pool = mp.Pool(
             processes = self.processes,
             initializer = pipeline_initializer,
-            initargs = (self.data, self.config, progress_port)
+            initargs = (self.data, self.config, progress_port),
+            maxtasksperchild = self.maxtasksperchild
         )
 
         return self

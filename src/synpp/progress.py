@@ -97,13 +97,17 @@ class ProgressServer(threading.Thread):
 
 class ProgressClient:
     def __init__(self, port):
-        context = zmq.Context()
+        self.context = zmq.Context()
 
-        self.socket = context.socket(zmq.PUSH)
+        self.socket = self.context.socket(zmq.PUSH)
         self.socket.connect("tcp://localhost:%d" % port)
 
     def update(self, amount = 1):
         self.socket.send_string(json.dumps(dict(amount = amount)))
+
+    def close(self):
+        self.socket.close()
+        self.context.term()
 
 class ProgressContext:
     def __init__(self, iterable = None, total = None, label = None, logger = logging.getLogger("synpp"), minimum_interval = 0):
