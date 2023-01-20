@@ -12,6 +12,7 @@ import pickle
 import shutil
 from typing import Dict, List, Union, Callable
 from types import ModuleType
+from collections.abc import MutableMapping
 
 import networkx as nx
 import yaml
@@ -34,6 +35,15 @@ def handle_rmtree_error(delegate, path, exec):
 def rmtree(path):
     return shutil.rmtree(path, ignore_errors = False, onerror = handle_rmtree_error)
 
+def flatten(d, parent_key='', sep='.'):
+    items = []
+    for k, v in d.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, MutableMapping):
+            items.extend(flatten(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 class NoDefaultValue:
     pass
@@ -408,7 +418,7 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
 
         # Process dependencies
         for position, upstream in enumerate(context.required_stages):
-            passed_parameters = list(upstream["config"].keys())
+            passed_parameters = list(flatten(upstream["config"]).keys())
 
             upstream_config = copy.copy(config)
             upstream_config.update(upstream["config"])
@@ -466,12 +476,13 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
 
             for upstream_index in stage["dependencies"]:
                 upstream = stages[upstream_index]
+                upstream_config = flatten(upstream["config"])
 
-                upstream_config_keys = upstream["config"].keys()
+                upstream_config_keys = upstream_config.keys()
                 explicit_config_keys = upstream["downstream-passed-parameters"] if "downstream-passed-parameters" in upstream else set()
 
                 for key in upstream_config_keys - explicit_config_keys:
-                    value = upstream["config"][key]
+                    value = upstream_config[key]
 
                     if key in passed_config_options:
                         assert passed_config_options[key] == value
