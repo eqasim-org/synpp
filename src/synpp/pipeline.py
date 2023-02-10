@@ -43,7 +43,21 @@ def flatten(d, parent_key='', sep='.'):
             items.extend(flatten(v, new_key, sep=sep).items())
         else:
             items.append((new_key, v))
-    return dict(items)
+    return copy.deepcopy(dict(items))
+
+def unflatten(flatten, sep='.'):
+    out = {}
+    for key, value in flatten.items():
+        parts = key.split(sep)
+        d = out
+        for part in parts[:-1]:
+            if part.isdigit():
+                part = int(part)
+            if part not in d:
+                d[part] = {}
+            d = d[part]
+        d[parts[-1]] = value
+    return copy.deepcopy(out)
 
 class NoDefaultValue:
     pass
@@ -147,22 +161,37 @@ def get_config_path(name, config):
         return name
 
 def has_config_value(name, config):
-    for segment in name.split("."):
-        if segment in config:
-            config = config[segment]
-        else:
-            return False
+    splitted_req = name.split(".")
+    for key in config:
+        found = True
+        spltted_key = key.split(".")
+        for idx in range(len(splitted_req)):
+            if splitted_req[idx] != spltted_key[idx]:
+                found = False
+                break
+        if found:
+            return True
+    return False
 
-    return True
 
 def get_config_value(name, config):
-    for segment in name.split("."):
-        if segment in config:
-            config = config[segment]
-        else:
-            return None
+    if name in config:
+        return config[name]
 
-    return config
+    splitted_req = name.split(".")
+    values = []
+    keys = []
+    for key in config:
+        found = True
+        splitted_key = key.split(".")
+        for idx in range(len(splitted_req)):
+            if splitted_req[idx] != splitted_key[idx]:
+                found = False
+                break
+        if found:
+            keys.append(".".join(splitted_key[len(splitted_req):]))
+            values.append(config[key])
+    return unflatten(dict(zip(keys, values)))
 
 def configure_stage(instance, context, config):
     config_values = {}
@@ -247,7 +276,7 @@ class ConfigurationContext(Context):
 
     def stage(self, descriptor, config = {}, alias = None, ephemeral = False):
         definition = {
-            "descriptor": descriptor, "config": config
+            "descriptor": descriptor, "config": flatten(config)
         }
 
         if not definition in self.required_stages:
@@ -280,7 +309,7 @@ class ValidateContext(Context):
 
 
 class ExecuteContext(Context):
-    def __init__(self, required_config, required_stages, aliases, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info):
+    def __init__(self, required_config, required_stages, aliases, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info, dependency_cache):
         self.required_config = required_config
         self.working_directory = working_directory
         self.dependencies = dependencies
@@ -288,7 +317,7 @@ class ExecuteContext(Context):
         self.cache_path = cache_path
         self.logger = logger
         self.stage_info = {}
-        self.dependency_cache = {}
+        self.dependency_cache = dependency_cache
         self.cache = cache
         self.dependency_info = dependency_info
         self.aliases = aliases
@@ -297,10 +326,10 @@ class ExecuteContext(Context):
         self.progress_context = None
 
     def config(self, option):
-        if not option in self.required_config:
+        if not has_config_value(option, self.required_config):
             raise PipelineError("Config option %s is not requested" % option)
 
-        return self.required_config[option]
+        return get_config_value(option, self.required_config)
 
     def stage(self, name, config = {}):
         dependency = self._get_dependency({ "descriptor": name, "config": config })
@@ -377,6 +406,8 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
     for index, stage in enumerate(pending):
         stage["required-index"] = index
 
+    global_config = flatten(global_config)
+
     while len(pending) > 0:
         definition = pending.pop(0)
 
@@ -394,12 +425,12 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
         # Obtain configuration information through configuration context
         context = ConfigurationContext(config, [d['descriptor'] for d in definitions], externals)
         wrapper.configure(context)
-
+        required_config = flatten(context.required_config)
         definition = copy.copy(definition)
         definition.update({
             "wrapper": wrapper,
-            "config": copy.copy(context.required_config),
-            "required_config": copy.copy(context.required_config),
+            "config": copy.copy(required_config),
+            "required_config": copy.copy(required_config),
             "required_stages": context.required_stages,
             "aliases": context.aliases
         })
@@ -418,7 +449,7 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
 
         # Process dependencies
         for position, upstream in enumerate(context.required_stages):
-            passed_parameters = list(flatten(upstream["config"]).keys())
+            passed_parameters = set(flatten(upstream["config"]).keys())
 
             upstream_config = copy.copy(config)
             upstream_config.update(upstream["config"])
@@ -476,13 +507,10 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
 
             for upstream_index in stage["dependencies"]:
                 upstream = stages[upstream_index]
-                upstream_config = flatten(upstream["config"])
-
-                upstream_config_keys = upstream_config.keys()
                 explicit_config_keys = upstream["downstream-passed-parameters"] if "downstream-passed-parameters" in upstream else set()
 
-                for key in upstream_config_keys - explicit_config_keys:
-                    value = upstream_config[key]
+                for key in upstream["config"].keys() - explicit_config_keys:
+                    value = upstream["config"][key]
 
                     if key in passed_config_options:
                         assert passed_config_options[key] == value
