@@ -162,7 +162,7 @@ def get_config_path(name, config):
 
 def has_config_value(name, config):
     splitted_req = name.split(".")
-    for key in config:
+    for key in flatten(config):
         found = True
         spltted_key = key.split(".")
         for idx in range(len(splitted_req)):
@@ -175,13 +175,14 @@ def has_config_value(name, config):
 
 
 def get_config_value(name, config):
-    if name in config:
-        return config[name]
+    flat = flatten(config)
+    if name in flat:
+        return flat[name]
 
     splitted_req = name.split(".")
     values = []
     keys = []
-    for key in config:
+    for key in flat:
         found = True
         splitted_key = key.split(".")
         for idx in range(len(splitted_req)):
@@ -190,7 +191,7 @@ def get_config_value(name, config):
                 break
         if found:
             keys.append(".".join(splitted_key[len(splitted_req):]))
-            values.append(config[key])
+            values.append(flat[key])
     return unflatten(dict(zip(keys, values)))
 
 def configure_stage(instance, context, config):
