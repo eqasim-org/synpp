@@ -148,21 +148,20 @@ def test_is_config_requested():
 
 class ComplexStageWithResult:
     def configure(self, context):
-        context.config("option")
         context.config("option.sub")
 
     def execute(self, context):
-        return context.config("option")["sub"], context.config("option.sub")
+        return context.config("option")["sub"]
 
 
 class ComplexStageWithResultMaster:
     def configure(self, context):
-        context.stage(ComplexStageWithResult, {"option": {"sub": 201}}, alias=0)
+        context.stage(ComplexStageWithResult, alias=0)
 
     def execute(self, context):
         return context.stage(0)
 
 
 def test_nested_config():
-    res = synpp.run([{'descriptor': ComplexStageWithResultMaster, 'config': {}}])
-    assert res[0] == (201, 201)
+    res = synpp.run([{'descriptor': ComplexStageWithResultMaster, 'config': {"option.sub": 3}}])
+    assert res[0] == 3
