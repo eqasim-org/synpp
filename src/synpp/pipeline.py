@@ -309,7 +309,7 @@ class ValidateContext(Context):
 
 
 class ExecuteContext(Context):
-    def __init__(self, required_config, required_stages, aliases, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info, dependency_cache):
+    def __init__(self, required_config, required_stages, aliases, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info):
         self.required_config = required_config
         self.working_directory = working_directory
         self.dependencies = dependencies
@@ -317,7 +317,7 @@ class ExecuteContext(Context):
         self.cache_path = cache_path
         self.logger = logger
         self.stage_info = {}
-        self.dependency_cache = dependency_cache
+        self.dependency_cache = {}
         self.cache = cache
         self.dependency_info = dependency_info
         self.aliases = aliases
