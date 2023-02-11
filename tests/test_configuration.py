@@ -144,3 +144,25 @@ def test_is_config_requested():
                       {'descriptor': "tests.fixtures.devalidation.A2"}])
     assert res1[0] == 10
     assert res2[0] == 5
+
+
+class ComplexStageWithResult:
+    def configure(self, context):
+        context.config("option")
+        context.config("option.sub")
+
+    def execute(self, context):
+        return context.config("option")["sub"], context.config("option.sub")
+
+
+class ComplexStageWithResultMaster:
+    def configure(self, context):
+        context.stage(ComplexStageWithResult, {"option": {"sub": 201}}, alias=0)
+
+    def execute(self, context):
+        return context.stage(0)
+
+
+def test_nested_config():
+    res = synpp.run([{'descriptor': ComplexStageWithResultMaster, 'config': {}}])
+    assert res[0] == (201, 201)
