@@ -2,10 +2,14 @@
 
 **Under development**
 
+- No updates yet, add them here
+
+**1.5.1**
+
 - Fix: Gracefully close zmq Context and Socket at progress server close
 - Add global stage aliases to provide drop-in replacement for existing stages
 - Add *externals* support
-- Bugfix: rollback unintended change of behaviour when running directly from the 
+- Bugfix: rollback unintended change of behaviour when running directly from the
 CLI/YAML for running required stages (instead of loading from cache).
 
 
