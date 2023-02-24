@@ -785,17 +785,6 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             logger.info("Executing stage %s ..." % hash)
             stage = registry[hash]
 
-            # Load the dependencies, either from cache or from file
-            #stage_dependencies = []
-            #stage_dependency_info = {}
-
-            #if name in dependencies:
-            #    stage_dependencies = dependencies[name]
-            #
-            #    for parent in stage_dependencies:
-            #        stage_dependency_info[parent] = meta[parent]["info"]
-            #stage_dependencies =
-
             stage_dependency_info = {}
             for dependency_hash in stage["dependencies"]:
                 stage_dependency_info[dependency_hash] = meta[dependency_hash]["info"]
