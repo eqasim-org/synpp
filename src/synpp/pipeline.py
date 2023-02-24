@@ -344,7 +344,7 @@ class ExecuteContext(Context):
             return self.cache[dependency]
         else:
             if not dependency in self.dependency_cache:
-                with open("%s/%s.p" % (self.working_directory, dependency), "rb") as f:
+                with open(get_cache_file_path(self.working_directory, dependency), "rb") as f:
                     self.logger.info("Loading cache for %s ..." % dependency)
                     self.dependency_cache[dependency] = pickle.load(f)
 
@@ -358,7 +358,7 @@ class ExecuteContext(Context):
             return self.cache_path
 
         dependency = self._get_dependency({ "descriptor": name, "config": config })
-        return "%s/%s.cache" % (self.working_directory, dependency)
+        return get_cache_directory_path(self.working_directory, dependency)
 
     def set_info(self, name, value):
         self.stage_info[name] = value
@@ -647,8 +647,8 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     if not working_directory is None:
         for hash in sorted_hashes:
-            directory_path = "%s/%s.cache" % (working_directory, hash)
-            file_path = "%s/%s.p" % (working_directory, hash)
+            directory_path = get_cache_directory_path(working_directory, hash)
+            file_path = get_cache_file_path(working_directory, hash)
 
             if os.path.exists(directory_path) and os.path.exists(file_path):
                 cache_available.add(hash)
@@ -710,9 +710,6 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     # 4.5) Devalidate if cache is not existant
     if not working_directory is None:
         for hash in sorted_cached_hashes:
-            directory_path = "%s/%s.cache" % (working_directory, hash)
-            file_path = "%s/%s.p" % (working_directory, hash)
-
             if not hash in cache_available:
                 stale_hashes.add(hash)
 
@@ -738,7 +735,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     # 4.8) Manually devalidate stages
     for hash in sorted_cached_hashes:
         stage = registry[hash]
-        cache_path = "%s/%s.cache" % (working_directory, hash)
+        cache_path = get_cache_directory_path(working_directory, hash)
         context = ValidateContext(stage["config"], cache_path)
 
         validation_token = stage["wrapper"].validate(context)
@@ -804,7 +801,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                 stage_dependency_info[dependency_hash] = meta[dependency_hash]["info"]
 
             # Prepare cache path
-            cache_path = "%s/%s.cache" % (working_directory, hash)
+            cache_path = get_cache_directory_path(working_directory, hash)
 
             if not working_directory is None:
                 if os.path.exists(cache_path):
@@ -821,7 +818,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             if working_directory is None:
                 cache[hash] = result
             else:
-                with open("%s/%s.p" % (working_directory, hash), "wb+") as f:
+                with open(get_cache_file_path(working_directory, hash), "wb+") as f:
                     logger.info("Writing cache for %s" % hash)
                     pickle.dump(result, f, protocol=4)
 
@@ -847,8 +844,8 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                         ephemeral_counts[dependency_hash] -= 1
 
                         if ephemeral_counts[dependency_hash] == 0:
-                            cache_directory_path = "%s/%s.cache" % (working_directory, dependency_hash)
-                            cache_file_path = "%s/%s.p" % (working_directory, dependency_hash)
+                            cache_directory_path = get_cache_directory_path(working_directory, dependency_hash)
+                            cache_file_path = get_cache_file_path(working_directory, dependency_hash)
 
                             rmtree(cache_directory_path)
                             os.remove(cache_file_path)
@@ -867,7 +864,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         # Load remaining previously cached results
         for hash in required_hashes:
             if results[required_hashes.index(hash)] is None:
-                with open("%s/%s.p" % (working_directory, hash), "rb") as f:
+                with open(get_cache_file_path(working_directory, hash), "rb") as f:
                     logger.info("Loading cache for %s ..." % hash)
                     results[required_hashes.index(hash)] = pickle.load(f)
 
