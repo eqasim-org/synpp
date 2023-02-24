@@ -221,11 +221,11 @@ def hash_name(name, config):
     else:
         return name
 
-def get_cache_directory_path(working_directory, hash):
-    return "%s/%s.cache" % (working_directory, hash)
+def get_cache_directory_path(working_directory, stage_hash):
+    return "%s/%s.cache" % (working_directory, stage_hash)
 
-def get_cache_file_path(working_directory, hash):
-    return "%s/%s.p" % (working_directory, hash)
+def get_cache_file_path(working_directory, stage_hash):
+    return "%s/%s.p" % (working_directory, stage_hash)
 
 class ConfiguredStage:
     def __init__(self, instance, config, configuration_context):
