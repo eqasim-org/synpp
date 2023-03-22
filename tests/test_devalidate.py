@@ -1,5 +1,6 @@
 import synpp
 from pytest import raises
+import time
 
 def test_devalidate_by_config(tmpdir):
     working_directory = tmpdir.mkdir("sub")
@@ -63,6 +64,8 @@ def test_devalidate_by_parent(tmpdir):
     assert "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert "tests.fixtures.devalidation.C__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
 
+    time.sleep(0.1)
+
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.C"
     }], config = { "a": 1 }, working_directory = working_directory, verbose = True)
@@ -72,6 +75,8 @@ def test_devalidate_by_parent(tmpdir):
     assert not "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert "tests.fixtures.devalidation.C__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
 
+    time.sleep(0.1)
+
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.A2"
     }], config = { "a": 1 }, working_directory = working_directory, verbose = True)
@@ -80,6 +85,8 @@ def test_devalidate_by_parent(tmpdir):
     assert "tests.fixtures.devalidation.A2" in result["stale"]
     assert not "tests.fixtures.devalidation.B__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert not "tests.fixtures.devalidation.C__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
+
+    time.sleep(0.1)
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.C"
