@@ -64,10 +64,10 @@ class NoDefaultValue:
 
 
 class StageInstance:
-    def __init__(self, instance, name, source_code):
+    def __init__(self, instance, name, module_hash):
         self.instance = instance
         self.name = name
-        self.source_code = source_code
+        self.source_code = module_hash
         if not hasattr(self.instance, "execute"):
             raise RuntimeError("Stage %s does not have execute method" % self.name)
 
@@ -210,8 +210,7 @@ def configure_name(name, config):
     return "%s(%s)" % (name, ",".join(values))
 
 
-def get_stage_id(stage_name, config):
-    name = stage_name
+def hash_name(name, config):
     if len(config) > 0:
         encoded_config = json.dumps(config, sort_keys = True).encode("utf-8")
         config_digest = hashlib.md5(encoded_config).hexdigest()
@@ -242,7 +241,7 @@ class ConfiguredStage:
         self.configuration_context = configuration_context
 
         self.configured_name = configure_name(instance.name, configuration_context.required_config)
-        self.hashed_name = get_stage_id(instance.name, configuration_context.required_config)
+        self.hashed_name = hash_name(instance.name, configuration_context.required_config)
 
     def configure(self, context):
         if hasattr(self.instance, "configure"):
@@ -451,7 +450,7 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
         })
 
         # Check for cycles
-        cycle_hash = get_stage_id(definition["wrapper"].name, definition["config"])
+        cycle_hash = hash_name(definition["wrapper"].name, definition["config"])
 
         if "cycle_hashes" in definition and cycle_hash in definition["cycle_hashes"]:
             print(definition["cycle_hashes"])
@@ -545,7 +544,7 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
     required_hashes = {}
 
     for stage in stages:
-        stage["hash"] = get_stage_id(stage["wrapper"].name, stage["config"])
+        stage["hash"] = hash_name(stage["wrapper"].name, stage["config"])
 
         if "required-index" in stage:
             index = stage["required-index"]
@@ -605,8 +604,8 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     graph = nx.DiGraph()
     flowchart = nx.MultiDiGraph() # graph to later plot
 
-    for stage_id in registry.keys():
-        graph.add_node(stage_id)
+    for hash in registry.keys():
+        graph.add_node(hash)
 
     for stage in registry.values():
         stage_name = stage['descriptor']
@@ -614,10 +613,10 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         if not flowchart.has_node(stage_name):
             flowchart.add_node(stage_name)
 
-        for stage_id in stage["dependencies"]:
-            graph.add_edge(stage_id, stage["hash"])
+        for hash in stage["dependencies"]:
+            graph.add_edge(hash, stage["hash"])
 
-            dependency_name = registry.get(stage_id)['descriptor']
+            dependency_name = registry.get(hash)['descriptor']
             if not flowchart.has_edge(dependency_name, stage_name):
                 flowchart.add_edge(dependency_name, stage_name)
 
@@ -642,37 +641,37 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     # Compute cache prefixes by appending source code digest
     source_codes = dict()
-    for stage_id in sorted_hashes:
-        source_codes[stage_id] = ""
-        for dependency_stage_id in nx.ancestors(graph, stage_id):
-            source_codes[stage_id] += registry[dependency_stage_id]["wrapper"].source_code
-        source_codes[stage_id] += registry[stage_id]["wrapper"].source_code
+    for hash in sorted_hashes:
+        source_codes[hash] = ""
+        for dependency_hash in nx.ancestors(graph, hash):
+            source_codes[hash] += registry[dependency_hash]["wrapper"].source_code
+        source_codes[hash] += registry[hash]["wrapper"].source_code
 
     # Check where cache is available
     cache_available = set()
     stored_validation_tokens = {}
 
     if not working_directory is None:
-        for stage_id in sorted_hashes:
-            prefix = get_cache_prefix(stage_id, source_codes[stage_id])
+        for hash in sorted_hashes:
+            prefix = get_cache_prefix(hash, source_codes[hash])
             prefixed = [filename[:-2] for filename in os.listdir(working_directory) if filename.startswith(prefix) and filename.endswith(".p")]
             if prefixed:
-                stored_validation_tokens[stage_id] = [filename.split("__")[-1] for filename in prefixed]
-                cache_available.add(stage_id)
-                registry[stage_id]["ephemeral"] = False
+                stored_validation_tokens[hash] = [filename.split("__")[-1] for filename in prefixed]
+                cache_available.add(hash)
+                registry[hash]["ephemeral"] = False
 
     # Set up ephemeral stage counts
     ephemeral_counts = {}
 
     for stage in registry.values():
-        for stage_id in stage["dependencies"]:
-            dependency = registry[stage_id]
+        for hash in stage["dependencies"]:
+            dependency = registry[hash]
 
-            if dependency["ephemeral"] and not stage_id in cache_available:
-                if not stage_id in ephemeral_counts:
-                    ephemeral_counts[stage_id] = 0
+            if dependency["ephemeral"] and not hash in cache_available:
+                if not hash in ephemeral_counts:
+                    ephemeral_counts[hash] = 0
 
-                ephemeral_counts[stage_id] += 1
+                ephemeral_counts[hash] += 1
 
     # 4) Devalidate stages
     sorted_cached_hashes = sorted_hashes
@@ -692,10 +691,10 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     cache_ids = {stage_id: get_cache_id(stage_id, source_codes[stage_id], current_validation_tokens[stage_id]) for stage_id in sorted_cached_hashes}
 
     # 4.8) Manually devalidate stages
-    for stage_id in sorted_cached_hashes:
-        if stage_id not in stored_validation_tokens or current_validation_tokens[stage_id] not in stored_validation_tokens[stage_id]:
-            print(f"Devalidation {stage_id}: Manually devalidate")
-            stale_hashes.add(stage_id)
+    for hash in sorted_cached_hashes:
+        if hash not in stored_validation_tokens or current_validation_tokens[hash] not in stored_validation_tokens[hash]:
+            print(f"Devalidation {hash}: Manually devalidate")
+            stale_hashes.add(hash)
 
     # 4.1) Devalidate if they are required (optional, otherwise will reload from cache)
     if rerun_required:
@@ -703,48 +702,46 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         stale_hashes.update(required_hashes)
 
     # 4.5) Devalidate if cache is not existant
-    for stage_id in sorted_cached_hashes:
-        if not stage_id in cache_available:
-            print(f"Devalidation {stage_id}: No cache")
-            stale_hashes.add(stage_id)
+    for hash in sorted_cached_hashes:
+        if not hash in cache_available:
+            print(f"Devalidation {hash}: No cache")
+            stale_hashes.add(hash)
 
     # 4.6) Devalidate if parent has been updated
     if working_directory is not None:
-        for stage_id in sorted_cached_hashes:
-            if not stage_id in stale_hashes:
-                ctime = os.stat(get_cache_file_path(working_directory, cache_ids[stage_id])).st_mtime_ns
+        for hash in sorted_cached_hashes:
+            if not hash in stale_hashes:
+                ctime = os.stat(get_cache_file_path(working_directory, cache_ids[hash])).st_mtime_ns
                 # print(f"Cached {stage_id}: {ctime}")
-                for dependency_stage_id in nx.ancestors(graph, stage_id):
-                    dependency_ctime = os.stat(get_cache_file_path(working_directory, cache_ids[dependency_stage_id])).st_mtime_ns
+                for dependency_hash in nx.ancestors(graph, hash):
+                    dependency_ctime = os.stat(get_cache_file_path(working_directory, cache_ids[dependency_hash])).st_mtime_ns
                     if dependency_ctime > ctime:
-                        print(f"Devalidation {stage_id}: Parent {dependency_stage_id} updated ({dependency_ctime} > {ctime})")
-                        stale_hashes.add(stage_id)
+                        print(f"Devalidation {hash}: Parent {dependency_hash} updated ({dependency_ctime} > {ctime})")
+                        stale_hashes.add(hash)
                         break
                     if dependency_ctime == ctime:
-                        print(f"{stage_id} and {dependency_stage_id}: {dependency_ctime} == {ctime}")
+                        print(f"{hash} and {dependency_hash}: {dependency_ctime} == {ctime}")
 
 
     # 4.9) Devalidate descendants of devalidated stages
-    for stage_id in set(stale_hashes):
-        for descendant_hash in nx.descendants(graph, stage_id):
+    for hash in set(stale_hashes):
+        for descendant_hash in nx.descendants(graph, hash):
             if not descendant_hash in stale_hashes:
-                print(f"Devalidation {stage_id}: Descendent of devalidated")
                 stale_hashes.add(descendant_hash)
 
     # 4.10) Devalidate ephemeral stages if necessary
     pending = set(stale_hashes)
 
     while len(pending) > 0:
-        for dependency_stage_id in registry[pending.pop()]["dependencies"]:
-            if registry[dependency_stage_id]["ephemeral"]:
-                if not dependency_stage_id in stale_hashes:
-                    pending.add(dependency_stage_id)
+        for dependency_hash in registry[pending.pop()]["dependencies"]:
+            if registry[dependency_hash]["ephemeral"]:
+                if not dependency_hash in stale_hashes:
+                    pending.add(dependency_hash)
 
-                print(f"Devalidation {stage_id}: Ephemeral")
-                stale_hashes.add(dependency_stage_id)
+                stale_hashes.add(dependency_hash)
 
     logger.info("Devalidating %d stages:" % len(stale_hashes))
-    for stage_id in stale_hashes: logger.info("- %s" % stage_id)
+    for hash in stale_hashes: logger.info("- %s" % hash)
 
     logger.info("Successfully reset meta data")
 
@@ -755,59 +752,70 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     progress = 0
 
     infos = {}
-    for stage_id in sorted_hashes:
-        if stage_id in stale_hashes:
-            logger.info("Executing stage %s ..." % stage_id)
-            stage = registry[stage_id]
+    for hash in sorted_hashes:
+        if hash in stale_hashes:
+            logger.info("Executing stage %s ..." % hash)
+            stage = registry[hash]
 
-            for dependency_stage_id in stage["dependencies"]:
-                info_path = get_info_path(working_directory, cache_ids[dependency_stage_id])
-                if dependency_stage_id not in infos and working_directory is not None:
+            # Load the dependencies, either from cache or from file
+            #stage_dependencies = []
+            #stage_dependency_info = {}
+
+            #if name in dependencies:
+            #    stage_dependencies = dependencies[name]
+            #
+            #    for parent in stage_dependencies:
+            #        stage_dependency_info[parent] = meta[parent]["info"]
+            #stage_dependencies =
+
+            for dependency_hash in stage["dependencies"]:
+                info_path = get_info_path(working_directory, cache_ids[dependency_hash])
+                if dependency_hash not in infos and working_directory is not None:
                     with open(info_path, "rb") as f:
-                        infos[dependency_stage_id] = pickle.load(f)
+                        infos[dependency_hash] = pickle.load(f)
 
             # Prepare cache path
-            cache_id = cache_ids[stage_id]
+            cache_id = cache_ids[hash]
             cache_path = get_cache_directory_path(working_directory, cache_id)
 
             if not working_directory is None:
                 if os.path.exists(cache_path):
                     rmtree(cache_path)
                 os.mkdir(cache_path)
+
             context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], cache_path, pipeline_config, logger, cache, infos, cache_ids)
             result = stage["wrapper"].execute(context)
 
-            if stage_id in required_hashes:
-                results[required_hashes.index(stage_id)] = result
+            if hash in required_hashes:
+                results[required_hashes.index(hash)] = result
 
-            cache[stage_id] = result
+            cache[hash] = result
             if working_directory is not None:
                 with open(get_cache_file_path(working_directory, cache_id), "wb+") as f:
-                    logger.info("Writing cache for %s" % stage_id)
+                    logger.info("Writing cache for %s" % hash)
                     pickle.dump(result, f, protocol=4)
-                # print(f"{stage_id}: {time.time_ns()}")
                 with open(get_info_path(working_directory, cache_id), "wb+") as f:
-                    logger.info("Writing info for %s" % stage_id)
+                    logger.info("Writing info for %s" % hash)
                     pickle.dump(context.stage_info, f, protocol=4)
-            infos[stage_id] = context.stage_info
+            infos[hash] = context.stage_info
 
             # Clear cache for ephemeral stages if they are no longer needed
             if not working_directory is None:
-                for dependency_stage_id in stage["dependencies"]:
-                    if dependency_stage_id in ephemeral_counts:
-                        ephemeral_counts[dependency_stage_id] -= 1
+                for dependency_hash in stage["dependencies"]:
+                    if dependency_hash in ephemeral_counts:
+                        ephemeral_counts[dependency_hash] -= 1
 
-                        if ephemeral_counts[dependency_stage_id] == 0:
-                            cache_directory_path = get_cache_directory_path(working_directory, cache_ids[dependency_stage_id])
-                            cache_file_path = get_cache_file_path(working_directory, cache_ids[dependency_stage_id])
+                        if ephemeral_counts[dependency_hash] == 0:
+                            cache_directory_path = get_cache_directory_path(working_directory, cache_ids[dependency_hash])
+                            cache_file_path = get_cache_file_path(working_directory, cache_ids[dependency_hash])
 
                             rmtree(cache_directory_path)
                             os.remove(cache_file_path)
 
-                            logger.info("Removed ephemeral %s." % dependency_stage_id)
-                            del ephemeral_counts[dependency_stage_id]
+                            logger.info("Removed ephemeral %s." % dependency_hash)
+                            del ephemeral_counts[dependency_hash]
 
-            logger.info("Finished running %s." % stage_id)
+            logger.info("Finished running %s." % hash)
 
             progress += 1
             logger.info("Pipeline progress: %d/%d (%.2f%%)" % (
@@ -816,22 +824,22 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     if not rerun_required:
         # Load remaining previously cached results
-        for stage_id in required_hashes:
-            if results[required_hashes.index(stage_id)] is None:
-                with open(get_cache_file_path(working_directory, cache_ids[stage_id]), "rb") as f:
-                    logger.info("Loading cache for %s ..." % stage_id)
-                    results[required_hashes.index(stage_id)] = pickle.load(f)
+        for hash in required_hashes:
+            if results[required_hashes.index(hash)] is None:
+                with open(get_cache_file_path(working_directory, cache_ids[hash]), "rb") as f:
+                    logger.info("Loading cache for %s ..." % hash)
+                    results[required_hashes.index(hash)] = pickle.load(f)
 
     if verbose:
-        flattened_infos = {}
+        info = {}
 
-        for stage_id in infos.keys():
-            flattened_infos.update(infos[stage_id])
+        for hash in infos.keys():
+            info.update(infos[hash])
 
         return {
             "results": results,
             "stale": stale_hashes,
-            "info": flattened_infos,
+            "info": info,
             "flowchart": node_link_data(flowchart)
         }
     else:
