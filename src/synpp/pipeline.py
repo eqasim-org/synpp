@@ -686,6 +686,8 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     # Cache mapper between stage id and cache id.
     cache_ids = {stage_id: get_cache_id(stage_id, source_codes[stage_id], current_validation_tokens[stage_id]) for stage_id in sorted_hashes}
+    file_cache_paths = {stage_id: get_cache_file_path(working_directory, cache_id) for stage_id, cache_id in cache_ids.items()}
+    dir_cache_paths = {stage_id: get_cache_directory_path(working_directory, cache_id) for stage_id, cache_id in cache_ids.items()}
 
     # 4.8) Manually devalidate stages
     for hash in sorted_hashes:
@@ -708,10 +710,10 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     if working_directory is not None:
         for hash in sorted_hashes:
             if not hash in stale_hashes:
-                ctime = os.stat(get_cache_file_path(working_directory, cache_ids[hash])).st_mtime_ns
+                ctime = os.stat(file_cache_paths[hash]).st_mtime_ns
                 # print(f"Cached {stage_id}: {ctime}")
                 for dependency_hash in nx.ancestors(graph, hash):
-                    dependency_ctime = os.stat(get_cache_file_path(working_directory, cache_ids[dependency_hash])).st_mtime_ns
+                    dependency_ctime = os.stat(file_cache_paths[dependency_hash]).st_mtime_ns
                     if dependency_ctime > ctime:
                         print(f"Devalidation {hash}: Parent {dependency_hash} updated ({dependency_ctime} > {ctime})")
                         stale_hashes.add(hash)
@@ -766,32 +768,28 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             #stage_dependencies =
 
             for dependency_hash in stage["dependencies"]:
-                info_path = get_info_path(working_directory, cache_ids[dependency_hash])
                 if dependency_hash not in infos and working_directory is not None:
-                    with open(info_path, "rb") as f:
+                    with open(get_info_path(working_directory, cache_ids[dependency_hash]), "rb") as f:
                         infos[dependency_hash] = pickle.load(f)
 
-            # Prepare cache path
-            cache_id = cache_ids[hash]
-            cache_path = get_cache_directory_path(working_directory, cache_id)
-
             if not working_directory is None:
-                if os.path.exists(cache_path):
-                    rmtree(cache_path)
-                os.mkdir(cache_path)
+                if os.path.exists(dir_cache_paths[hash]):
+                    rmtree(dir_cache_paths[hash])
+                os.mkdir(dir_cache_paths[hash])
 
-            context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], cache_path, pipeline_config, logger, cache, infos, cache_ids)
+            context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], dir_cache_paths[hash], pipeline_config, logger, cache, infos, cache_ids)
             result = stage["wrapper"].execute(context)
 
             if hash in required_hashes:
                 results[required_hashes.index(hash)] = result
 
-            cache[hash] = result
-            if working_directory is not None:
-                with open(get_cache_file_path(working_directory, cache_id), "wb+") as f:
+            if working_directory is None:
+                cache[hash] = result
+            else:
+                with open(file_cache_paths[hash], "wb+") as f:
                     logger.info("Writing cache for %s" % hash)
                     pickle.dump(result, f, protocol=4)
-                with open(get_info_path(working_directory, cache_id), "wb+") as f:
+                with open(get_info_path(working_directory, cache_ids[hash]), "wb+") as f:
                     logger.info("Writing info for %s" % hash)
                     pickle.dump(context.stage_info, f, protocol=4)
             infos[hash] = context.stage_info
@@ -803,8 +801,8 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                         ephemeral_counts[dependency_hash] -= 1
 
                         if ephemeral_counts[dependency_hash] == 0:
-                            cache_directory_path = get_cache_directory_path(working_directory, cache_ids[dependency_hash])
-                            cache_file_path = get_cache_file_path(working_directory, cache_ids[dependency_hash])
+                            cache_directory_path = dir_cache_paths[dependency_hash]
+                            cache_file_path = file_cache_paths[dependency_hash]
 
                             rmtree(cache_directory_path)
                             os.remove(cache_file_path)
@@ -823,7 +821,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         # Load remaining previously cached results
         for hash in required_hashes:
             if results[required_hashes.index(hash)] is None:
-                with open(get_cache_file_path(working_directory, cache_ids[hash]), "rb") as f:
+                with open(file_cache_paths[hash], "rb") as f:
                     logger.info("Loading cache for %s ..." % hash)
                     results[required_hashes.index(hash)] = pickle.load(f)
 
