@@ -672,7 +672,6 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                 ephemeral_counts[hash] += 1
 
     # 4) Devalidate stages
-    sorted_cached_hashes = sorted_hashes
     stale_hashes = set()
 
     # Get current validation tokens
@@ -682,14 +681,14 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             registry[stage_id]["wrapper"].validate(
                 ValidateContext(registry[stage_id]["config"], get_cache_directory_path(working_directory, stage_id))
             )
-        ) for stage_id in sorted_cached_hashes
+        ) for stage_id in sorted_hashes
     }
 
     # Cache mapper between stage id and cache id.
-    cache_ids = {stage_id: get_cache_id(stage_id, source_codes[stage_id], current_validation_tokens[stage_id]) for stage_id in sorted_cached_hashes}
+    cache_ids = {stage_id: get_cache_id(stage_id, source_codes[stage_id], current_validation_tokens[stage_id]) for stage_id in sorted_hashes}
 
     # 4.8) Manually devalidate stages
-    for hash in sorted_cached_hashes:
+    for hash in sorted_hashes:
         if hash not in cache_available or current_validation_tokens[hash] not in cache_available[hash]:
             print(f"Devalidation {hash}: Manually devalidate")
             stale_hashes.add(hash)
@@ -700,14 +699,14 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         stale_hashes.update(required_hashes)
 
     # 4.5) Devalidate if cache is not existant
-    for hash in sorted_cached_hashes:
+    for hash in sorted_hashes:
         if not hash in cache_available:
             print(f"Devalidation {hash}: No cache")
             stale_hashes.add(hash)
 
     # 4.6) Devalidate if parent has been updated
     if working_directory is not None:
-        for hash in sorted_cached_hashes:
+        for hash in sorted_hashes:
             if not hash in stale_hashes:
                 ctime = os.stat(get_cache_file_path(working_directory, cache_ids[hash])).st_mtime_ns
                 # print(f"Cached {stage_id}: {ctime}")
