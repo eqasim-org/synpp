@@ -654,6 +654,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         for hash in sorted_hashes:
             prefix = get_cache_prefix(hash, source_codes[hash])
             prefixed = [filename[:-2] for filename in os.listdir(working_directory) if filename.startswith(prefix) and filename.endswith(".p")]
+
             if prefixed:
                 cache_available[hash] = [filename.split("__")[-1] for filename in prefixed]
                 registry[hash]["ephemeral"] = False
@@ -692,18 +693,15 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     # 4.8) Manually devalidate stages
     for hash in sorted_hashes:
         if hash not in cache_available or current_validation_tokens[hash] not in cache_available[hash]:
-            print(f"Devalidation {hash}: Manually devalidate")
             stale_hashes.add(hash)
 
     # 4.1) Devalidate if they are required (optional, otherwise will reload from cache)
     if rerun_required:
-        print(f"Devalidation {required_hashes}: Requirement")
         stale_hashes.update(required_hashes)
 
     # 4.5) Devalidate if cache is not existant
     for hash in sorted_hashes:
         if not hash in cache_available:
-            print(f"Devalidation {hash}: No cache")
             stale_hashes.add(hash)
 
     # 4.6) Devalidate if parent has been updated
@@ -711,15 +709,11 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         for hash in sorted_hashes:
             if not hash in stale_hashes:
                 ctime = os.stat(file_cache_paths[hash]).st_mtime_ns
-                # print(f"Cached {stage_id}: {ctime}")
                 for dependency_hash in nx.ancestors(graph, hash):
                     dependency_ctime = os.stat(file_cache_paths[dependency_hash]).st_mtime_ns
                     if dependency_ctime > ctime:
-                        print(f"Devalidation {hash}: Parent {dependency_hash} updated ({dependency_ctime} > {ctime})")
                         stale_hashes.add(hash)
                         break
-                    if dependency_ctime == ctime:
-                        print(f"{hash} and {dependency_hash}: {dependency_ctime} == {ctime}")
 
 
     # 4.9) Devalidate descendants of devalidated stages
@@ -772,12 +766,15 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                     with open(get_info_path(working_directory, cache_ids[dependency_hash]), "rb") as f:
                         infos[dependency_hash] = pickle.load(f)
 
-            if not working_directory is None:
-                if os.path.exists(dir_cache_paths[hash]):
-                    rmtree(dir_cache_paths[hash])
-                os.mkdir(dir_cache_paths[hash])
+            # Prepare cache path
+            cache_path = dir_cache_paths[hash]
 
-            context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], dir_cache_paths[hash], pipeline_config, logger, cache, infos, cache_ids)
+            if not working_directory is None:
+                if os.path.exists(cache_path):
+                    rmtree(cache_path)
+                os.mkdir(cache_path)
+
+            context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], cache_path, pipeline_config, logger, cache, infos, cache_ids)
             result = stage["wrapper"].execute(context)
 
             if hash in required_hashes:
