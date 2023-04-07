@@ -648,16 +648,14 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         source_codes[hash] += registry[hash]["wrapper"].source_code
 
     # Check where cache is available
-    cache_available = set()
-    stored_validation_tokens = {}
+    cache_available = {}
 
     if not working_directory is None:
         for hash in sorted_hashes:
             prefix = get_cache_prefix(hash, source_codes[hash])
             prefixed = [filename[:-2] for filename in os.listdir(working_directory) if filename.startswith(prefix) and filename.endswith(".p")]
             if prefixed:
-                stored_validation_tokens[hash] = [filename.split("__")[-1] for filename in prefixed]
-                cache_available.add(hash)
+                cache_available[hash] = [filename.split("__")[-1] for filename in prefixed]
                 registry[hash]["ephemeral"] = False
 
     # Set up ephemeral stage counts
@@ -692,7 +690,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     # 4.8) Manually devalidate stages
     for hash in sorted_cached_hashes:
-        if hash not in stored_validation_tokens or current_validation_tokens[hash] not in stored_validation_tokens[hash]:
+        if hash not in cache_available or current_validation_tokens[hash] not in cache_available[hash]:
             print(f"Devalidation {hash}: Manually devalidate")
             stale_hashes.add(hash)
 
