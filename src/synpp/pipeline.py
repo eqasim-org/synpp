@@ -67,7 +67,7 @@ class StageInstance:
     def __init__(self, instance, name, module_hash):
         self.instance = instance
         self.name = name
-        self.source_code = module_hash
+        self.module_hash = module_hash
         if not hasattr(self.instance, "execute"):
             raise RuntimeError("Stage %s does not have execute method" % self.name)
 
@@ -88,8 +88,11 @@ class StageInstance:
         return self.instance.execute(context)
 
 
-def get_source_code(descriptor):
-    return inspect.getsource(descriptor)
+def get_stage_hash(descriptor):
+    source = inspect.getsource(descriptor)
+    hash = hashlib.md5()
+    hash.update(source.encode("utf-8"))
+    return hash.hexdigest()
 
 def synpp_import_module(name, package=None, externals={}):
 
@@ -130,25 +133,25 @@ def resolve_stage(descriptor, externals: dict = {}, aliases: dict = {}):
                 return None  # definitely not a stage
 
     if inspect.ismodule(descriptor):
-        source_code = get_source_code(descriptor)
-        return StageInstance(descriptor, descriptor.__name__, source_code)
+        stage_hash = get_stage_hash(descriptor)
+        return StageInstance(descriptor, descriptor.__name__, stage_hash)
 
     if inspect.isclass(descriptor):
-        source_code = get_source_code(descriptor)
-        return StageInstance(descriptor(), "%s.%s" % (descriptor.__module__, descriptor.__name__), source_code)
+        stage_hash = get_stage_hash(descriptor)
+        return StageInstance(descriptor(), "%s.%s" % (descriptor.__module__, descriptor.__name__), stage_hash)
 
     if inspect.isfunction(descriptor):
         if not hasattr(descriptor, 'stage_params'):
             raise PipelineError("Functions need to be decorated with @synpp.stage in order to be used in the pipeline.")
         function_stage = DecoratedStage(execute_func=descriptor, stage_params=descriptor.stage_params)
-        source_code = get_source_code(descriptor)
-        return StageInstance(function_stage, "%s.%s" % (descriptor.__module__, descriptor.__name__), source_code)
+        stage_hash = get_stage_hash(descriptor)
+        return StageInstance(function_stage, "%s.%s" % (descriptor.__module__, descriptor.__name__), stage_hash)
 
     if hasattr(descriptor, 'execute'):
         # Last option: arbitrary object which looks like a stage
         clazz = descriptor.__class__
-        source_code = get_source_code(clazz)
-        return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__), source_code)
+        stage_hash = get_stage_hash(clazz)
+        return StageInstance(descriptor, "%s.%s" % (clazz.__module__, clazz.__name__), stage_hash)
 
     # couldn't resolve stage (this is something else)
     return None
@@ -212,18 +215,15 @@ def configure_name(name, config):
 
 def hash_name(name, config):
     if len(config) > 0:
-        encoded_config = json.dumps(config, sort_keys = True).encode("utf-8")
-        config_digest = hashlib.md5(encoded_config).hexdigest()
-        name += "__" + config_digest
-    return name
+        hash = hashlib.md5()
+        hash.update(json.dumps(config, sort_keys = True).encode("utf-8"))
+        return "%s__%s" % (name, hash.hexdigest())
+    else:
+        return name
 
 def get_cache_prefix(stage_id, source_code):
     cache_prefix = stage_id + "__" + hashlib.md5(source_code.encode()).hexdigest()
     return cache_prefix
-
-def get_cache_id(stage_id, source_code, validation_token):
-    cache_id = get_cache_prefix(stage_id, source_code) + "__" + str(validation_token)
-    return cache_id
 
 def get_cache_directory_path(working_directory, cache_id):
     return "%s/%s.cache" % (working_directory, cache_id)
@@ -573,6 +573,7 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
 
     return registry
 
+
 def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False,
         logger = logging.getLogger("synpp"), rerun_required=True, ensure_working_directory=False,
         externals = {}, aliases = {}):
@@ -640,12 +641,12 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     sorted_hashes = list(nx.topological_sort(graph))
 
     # Compute cache prefixes by appending source code digest
-    source_codes = dict()
+    source_codes = {}
     for hash in sorted_hashes:
         source_codes[hash] = ""
         for dependency_hash in nx.ancestors(graph, hash):
-            source_codes[hash] += registry[dependency_hash]["wrapper"].source_code
-        source_codes[hash] += registry[hash]["wrapper"].source_code
+            source_codes[hash] += registry[dependency_hash]["wrapper"].module_hash
+        source_codes[hash] += registry[hash]["wrapper"].module_hash
 
     # Check where cache is available
     cache_available = {}
@@ -686,7 +687,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     }
 
     # Cache mapper between stage id and cache id.
-    cache_ids = {stage_id: get_cache_id(stage_id, source_codes[stage_id], current_validation_tokens[stage_id]) for stage_id in sorted_hashes}
+    cache_ids = {stage_id: get_cache_prefix(stage_id, source_codes[stage_id]) + "__" + str(current_validation_tokens[stage_id]) for stage_id in sorted_hashes}
     file_cache_paths = {stage_id: get_cache_file_path(working_directory, cache_id) for stage_id, cache_id in cache_ids.items()}
     dir_cache_paths = {stage_id: get_cache_directory_path(working_directory, cache_id) for stage_id, cache_id in cache_ids.items()}
 
