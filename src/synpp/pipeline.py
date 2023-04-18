@@ -640,20 +640,20 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     sorted_hashes = list(nx.topological_sort(graph))
 
-    # Compute cache prefixes by appending source code digest
-    source_codes = {}
+    # Concatenate source digest of dependencies
+    source_digests = {}
     for hash in sorted_hashes:
-        source_codes[hash] = ""
+        source_digests[hash] = ""
         for dependency_hash in nx.ancestors(graph, hash):
-            source_codes[hash] += registry[dependency_hash]["wrapper"].module_hash
-        source_codes[hash] += registry[hash]["wrapper"].module_hash
+            source_digests[hash] += registry[dependency_hash]["wrapper"].module_hash
+        source_digests[hash] += registry[hash]["wrapper"].module_hash
 
     # Check where cache is available
     cache_available = {}
 
     if not working_directory is None:
         for hash in sorted_hashes:
-            prefix = get_cache_prefix(hash, source_codes[hash])
+            prefix = get_cache_prefix(hash, source_digests[hash])
             prefixed = [filename[:-2] for filename in os.listdir(working_directory) if filename.startswith(prefix) and filename.endswith(".p")]
 
             if prefixed:
@@ -687,7 +687,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     }
 
     # Cache mapper between stage id and cache id.
-    cache_ids = {stage_id: get_cache_prefix(stage_id, source_codes[stage_id]) + "__" + str(current_validation_tokens[stage_id]) for stage_id in sorted_hashes}
+    cache_ids = {stage_id: get_cache_prefix(stage_id, source_digests[stage_id]) + "__" + str(current_validation_tokens[stage_id]) for stage_id in sorted_hashes}
     file_cache_paths = {stage_id: get_cache_file_path(working_directory, cache_id) for stage_id, cache_id in cache_ids.items()}
     dir_cache_paths = {stage_id: get_cache_directory_path(working_directory, cache_id) for stage_id, cache_id in cache_ids.items()}
 
