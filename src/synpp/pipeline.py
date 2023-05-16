@@ -711,10 +711,11 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             if not hash in stale_hashes:
                 ctime = os.stat(file_cache_paths[hash]).st_mtime_ns
                 for dependency_hash in nx.ancestors(graph, hash):
-                    dependency_ctime = os.stat(file_cache_paths[dependency_hash]).st_mtime_ns
-                    if dependency_ctime > ctime:
-                        stale_hashes.add(hash)
-                        break
+                    if dependency_hash not in stale_hashes:
+                        dependency_ctime = os.stat(file_cache_paths[dependency_hash]).st_mtime_ns
+                        if dependency_ctime > ctime:
+                            stale_hashes.add(hash)
+                            break
 
     # 4.9) Devalidate descendants of devalidated stages
     for hash in set(stale_hashes):
