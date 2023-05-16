@@ -737,8 +737,6 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     logger.info("Devalidating %d stages:" % len(stale_hashes))
     for hash in stale_hashes: logger.info("- %s" % hash)
 
-    logger.info("Successfully reset meta data")
-
     # 6) Execute stages
     results = [None] * len(definitions)
     cache = {}
