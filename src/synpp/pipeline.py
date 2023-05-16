@@ -718,7 +718,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             if not hash in stale_hashes:
                 ctime = os.stat(file_cache_paths[hash]).st_mtime_ns
                 for dependency_hash in nx.ancestors(graph, hash):
-                    if dependency_hash not in stale_hashes:
+                    if dependency_hash not in stale_hashes and dependency_hash in cache_available:
                         dependency_ctime = os.stat(file_cache_paths[dependency_hash]).st_mtime_ns
                         if dependency_ctime > ctime:
                             stale_hashes.add(hash)
