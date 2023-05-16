@@ -644,7 +644,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     source_digests = {}
     for hash in sorted_hashes:
         source_digests[hash] = ""
-        for dependency_hash in nx.ancestors(graph, hash):
+        for dependency_hash in sorted(nx.ancestors(graph, hash)):
             source_digests[hash] += registry[dependency_hash]["wrapper"].module_hash
         source_digests[hash] += registry[hash]["wrapper"].module_hash
 
