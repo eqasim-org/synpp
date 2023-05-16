@@ -674,6 +674,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                 ephemeral_counts[hash] += 1
 
     # 4) Devalidate stages
+    sorted_cached_hashes = sorted_hashes - ephemeral_counts.keys()
     stale_hashes = set()
 
     # Get current validation tokens
@@ -691,23 +692,29 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     file_cache_paths = {stage_id: get_cache_file_path(working_directory, cache_id) for stage_id, cache_id in cache_ids.items()}
     dir_cache_paths = {stage_id: get_cache_directory_path(working_directory, cache_id) for stage_id, cache_id in cache_ids.items()}
 
-    # 4.8) Manually devalidate stages
-    for hash in sorted_hashes:
-        if hash in cache_available and current_validation_tokens[hash] not in cache_available[hash]:
-            stale_hashes.add(hash)
-
     # 4.1) Devalidate if they are required (optional, otherwise will reload from cache)
     if rerun_required:
         stale_hashes.update(required_hashes)
 
-    # 4.5) Devalidate if cache is not existant
-    for hash in sorted_hashes:
-        if not hash in cache_available:
-            stale_hashes.add(hash)
+    if working_directory is None:
+        # If no working_directory, devalidate all dependencies
+        for hash in list(stale_hashes):
+            for dependency_hash in nx.ancestors(graph, hash):
+                stale_hashes.add(dependency_hash)
 
-    # 4.6) Devalidate if parent has been updated
-    if working_directory is not None:
-        for hash in sorted_hashes:
+    else:
+        # 4.5) Devalidate if cache is not existant
+        for hash in sorted_cached_hashes:
+            if not hash in cache_available:
+                stale_hashes.add(hash)
+
+        # 4.8) Manually devalidate stages
+        for hash in sorted_cached_hashes:
+            if hash in cache_available and current_validation_tokens[hash] not in cache_available[hash]:
+                stale_hashes.add(hash)
+
+        # 4.6) Devalidate if parent has been updated
+        for hash in sorted_cached_hashes:
             if not hash in stale_hashes:
                 ctime = os.stat(file_cache_paths[hash]).st_mtime_ns
                 for dependency_hash in nx.ancestors(graph, hash):
@@ -717,22 +724,22 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                             stale_hashes.add(hash)
                             break
 
-    # 4.9) Devalidate descendants of devalidated stages
-    for hash in set(stale_hashes):
-        for descendant_hash in nx.descendants(graph, hash):
-            if not descendant_hash in stale_hashes:
-                stale_hashes.add(descendant_hash)
+        # 4.9) Devalidate descendants of devalidated stages
+        for hash in set(stale_hashes):
+            for descendant_hash in nx.descendants(graph, hash):
+                if not descendant_hash in stale_hashes:
+                    stale_hashes.add(descendant_hash)
 
-    # 4.10) Devalidate ephemeral stages if necessary
-    pending = set(stale_hashes)
+        # 4.10) Devalidate ephemeral stages if necessary
+        pending = set(stale_hashes)
 
-    while len(pending) > 0:
-        for dependency_hash in registry[pending.pop()]["dependencies"]:
-            if registry[dependency_hash]["ephemeral"]:
-                if not dependency_hash in stale_hashes:
-                    pending.add(dependency_hash)
+        while len(pending) > 0:
+            for dependency_hash in registry[pending.pop()]["dependencies"]:
+                if registry[dependency_hash]["ephemeral"]:
+                    if not dependency_hash in stale_hashes:
+                        pending.add(dependency_hash)
 
-                stale_hashes.add(dependency_hash)
+                    stale_hashes.add(dependency_hash)
 
     logger.info("Devalidating %d stages:" % len(stale_hashes))
     for hash in stale_hashes: logger.info("- %s" % hash)
