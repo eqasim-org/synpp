@@ -693,7 +693,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
     # 4.8) Manually devalidate stages
     for hash in sorted_hashes:
-        if hash not in cache_available or current_validation_tokens[hash] not in cache_available[hash]:
+        if hash in cache_available and current_validation_tokens[hash] not in cache_available[hash]:
             stale_hashes.add(hash)
 
     # 4.1) Devalidate if they are required (optional, otherwise will reload from cache)
@@ -715,7 +715,6 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                     if dependency_ctime > ctime:
                         stale_hashes.add(hash)
                         break
-
 
     # 4.9) Devalidate descendants of devalidated stages
     for hash in set(stale_hashes):
