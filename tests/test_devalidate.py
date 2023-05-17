@@ -147,7 +147,6 @@ config:
     assert "tests.fixtures.devalidation.E__42b7b4f2921788ea14dac5566e6f06d0" in result["stale"]
     assert not "tests.fixtures.devalidation.E1" in result["stale"]
     assert not "tests.fixtures.devalidation.E2" in result["stale"]
-    print("done")
 
 
 def test_devalidate_token(tmpdir):
