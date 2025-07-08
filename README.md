@@ -124,6 +124,8 @@ no default value is given for an option in `configure` and in case that no
 specific value is passed to the stage, a global configuration that is specific
 to the pipeline will be used to look up the value.
 
+Note that the call to `context.config` can have a default value as the second argument, and you can set `volatile = True` which means that the stage will not be reevaluated if this config value changes. Such a behavior is useful if you are rather changing the number of cores or the available memory, but don't want to rerun the parts of the code that already passed with the given values.
+
 ### Execution
 
 The requested configuration values and stages are afterwards available
