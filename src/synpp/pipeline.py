@@ -213,10 +213,10 @@ def configure_name(name, config):
     return "%s(%s)" % (name, ",".join(values))
 
 
-def hash_name(name, config):
+def hash_name(name, config, volatile):
     if len(config) > 0:
         hash = hashlib.md5()
-        hash.update(json.dumps(config, sort_keys = True).encode("utf-8"))
+        hash.update(json.dumps({ k: v for k, v in config.items() if not k in volatile }, sort_keys = True).encode("utf-8"))
         return "%s__%s" % (name, hash.hexdigest())
     else:
         return name
@@ -229,7 +229,7 @@ class ConfiguredStage:
         self.configuration_context = configuration_context
 
         self.configured_name = configure_name(instance.name, configuration_context.required_config)
-        self.hashed_name = hash_name(instance.name, configuration_context.required_config)
+        self.hashed_name = hash_name(instance.name, configuration_context.required_config, configuration_context.volatile_config)
 
     def configure(self, context):
         if hasattr(self.instance, "configure"):
@@ -252,6 +252,7 @@ class ConfigurationContext(Context):
         self.config_requested_stages = [resolve_stage(d, externals, global_aliases).instance for d in config_definitions]
 
         self.required_config = {}
+        self.volatile_config = set()
 
         self.required_stages = []
         self.aliases = {}
@@ -261,7 +262,7 @@ class ConfigurationContext(Context):
         self.externals = externals
         self.global_aliases = global_aliases
 
-    def config(self, option, default = NoDefaultValue()):
+    def config(self, option, default = NoDefaultValue(), volatile = False):
         if has_config_value(option, self.base_config):
             self.required_config[option] = get_config_value(option, self.base_config)
         elif not isinstance(default, NoDefaultValue):
@@ -273,6 +274,9 @@ class ConfigurationContext(Context):
         if not option in self.required_config:
             raise PipelineError("Config option is not available: %s" % option)
 
+        if volatile:
+            self.volatile_config.add(option)
+        
         return self.required_config[option]
 
     def stage(self, descriptor, config = {}, alias = None, ephemeral = False):
@@ -432,12 +436,13 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
             "wrapper": wrapper,
             "config": copy.copy(required_config),
             "required_config": copy.copy(required_config),
+            "volatile_config": context.volatile_config,
             "required_stages": context.required_stages,
             "aliases": context.aliases
         })
 
         # Check for cycles
-        cycle_hash = hash_name(definition["wrapper"].name, definition["config"])
+        cycle_hash = hash_name(definition["wrapper"].name, definition["config"], definition["volatile_config"])
 
         if "cycle_hashes" in definition and cycle_hash in definition["cycle_hashes"]:
             print(definition["cycle_hashes"])
@@ -531,7 +536,7 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
     required_hashes = {}
 
     for stage in stages:
-        stage["hash"] = hash_name(stage["wrapper"].name, stage["config"])
+        stage["hash"] = hash_name(stage["wrapper"].name, stage["config"], stage["volatile_config"])
 
         if "required-index" in stage:
             index = stage["required-index"]
