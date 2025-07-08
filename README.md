@@ -432,6 +432,26 @@ and all configuration options. The stages listed above should be available
 as Python modules or classes. Furthermore, `aliases` can be defined as a top-level
 element of the file.
 
+You can override settings via the command line. To override the working directory, use:
+
+```bash
+--working-directory directory
+```
+
+To define the list of stages to run, provide individual `--run` options. They will fully replace the stages defined in the configuration:
+
+```bash
+--run stage1 --run stage2
+```
+
+To override configruation, options, prepend them with two dashes:
+
+``bash
+--my.config.option value
+``
+
+If a value is already present in the config file, the provided value will automatically be cast to the same data type. If the value does not exist yet, any argument is treated as a string.
+
 ## NYC Taxi Example
 
 This repository contains an example of the pipline. To run it, you will need

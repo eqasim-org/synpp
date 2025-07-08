@@ -887,9 +887,42 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         return results
 
 
-def run_from_yaml(path):
-    Synpp.build_from_yml(path).run_pipeline()
+def run_from_yaml(path, working_directory, run, overrides):
+    Synpp.build_from_yml(path, working_directory, run, overrides).run_pipeline()
 
+def run_from_cmd(argv):
+    config_path = None
+    working_directory = None
+    run = set()
+    overrides = {}
+
+    k = 0
+    while k < len(argv):
+        if argv[k] == "--working-directory":
+            working_directory = argv[k + 1]
+            k += 2
+        elif argv[k] == "--run":
+            run.add(argv[k + 1])
+            k += 2
+        elif argv[k].startswith("--"):
+            option = argv[k][2:]
+            value = argv[k + 1]
+            overrides[option] = value
+            k += 2
+        else:
+            if config_path is not None:
+                raise RuntimeError("Config path already provided")
+            
+            config_path = argv[k]
+            k += 1
+
+    if config_path is None:
+        config_path = "config.yml"
+
+    if not os.path.isfile(config_path):
+        raise PipelineError("Config file does not exist: %s" % config_path)
+
+    return run_from_yaml(config_path, working_directory, run, overrides)
 
 # Convenience class mostly for running stages individually (possibly interactively, e.g. in Jupyter)
 class Synpp:
@@ -923,13 +956,14 @@ class Synpp:
                    aliases=self.aliases)[0]
 
     @staticmethod
-    def build_from_yml(config_path):
+    def build_from_yml(config_path, working_directory = None, run = [], overrides = {}):
         with open(config_path) as f:
             settings = yaml.load(f, Loader=yaml.SafeLoader)
 
         definitions = []
 
-        for item in settings["run"]:
+        run = run if len(run) > 0 else settings["run"]
+        for item in run:
             parameters = {}
 
             if type(item) == dict:
@@ -942,7 +976,26 @@ class Synpp:
             })
 
         config = settings["config"] if "config" in settings else {}
-        working_directory = settings["working_directory"] if "working_directory" in settings else None
+
+        for option, value in overrides.items():
+            current = config
+            for segment in option.split(".")[:-1]:
+                if not segment in current:
+                    current[segment] = dict()
+                
+                current = current[segment]
+
+            assert type(current) == dict
+
+            option = option.split(".")[-1]
+            if option in current:
+                current[option] = type(current[option])(value)
+            else:
+                current[option] = value           
+
+        if working_directory is None:
+            working_directory = settings["working_directory"] if "working_directory" in settings else None
+        
         flowchart_path = settings["flowchart_path"] if "flowchart_path" in settings else None
         dryrun = settings["dryrun"] if "dryrun" in settings else False
         externals = settings["externals"] if "externals" in settings else {}

@@ -2,7 +2,8 @@
 
 **Under development**
 
-- No updates yet, add them here
+- Add possibility to override config values to the command line interface
+- Add `volatile` keyword to `ConfigurationContext.config` to avoid regenerating a stage when the value of that option changes
 
 **1.5.1**
 
