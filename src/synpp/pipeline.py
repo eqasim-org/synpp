@@ -631,10 +631,10 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
 
         logger.info("Writing pipeline flowchart to : {}".format(flowchart_path))
         with open(flowchart_path, 'w') as outfile:
-            json.dump(node_link_data(flowchart), outfile)
+            json.dump(node_link_data(flowchart, edges = "edges"), outfile)
 
     if dryrun:
-        return node_link_data(flowchart)
+        return node_link_data(flowchart, edges = "edges")
 
     for cycle in nx.cycles.simple_cycles(graph):
         cycle = [registry[hash]["hash"] for hash in cycle] # TODO: Make more verbose
@@ -828,7 +828,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             # Update meta information
             meta[hash] = {
                 "config": stage["config"],
-                "updated": datetime.datetime.utcnow().timestamp(),
+                "updated": datetime.datetime.now(datetime.UTC).timestamp(),
                 "dependencies": {
                     dependency_hash: meta[dependency_hash]["updated"] for dependency_hash in stage["dependencies"]
                 },
@@ -881,7 +881,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             "results": results,
             "stale": stale_hashes,
             "info": info,
-            "flowchart": node_link_data(flowchart)
+            "flowchart": node_link_data(flowchart, edges = "edges")
         }
     else:
         return results

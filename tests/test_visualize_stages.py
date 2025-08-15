@@ -12,7 +12,7 @@ def test_visualize_stages_results():
                                {"id": "tests.fixtures.visualization.stage_1"},
                                {"id": "tests.fixtures.visualization.stage_2"}]
 
-    assert result['links'] == [{'source': 'tests.fixtures.visualization.stage_1',
+    assert result['edges'] == [{'source': 'tests.fixtures.visualization.stage_1',
                                 'target': 'tests.fixtures.visualization.stage_3',
                                 'key': 0},
                                {'source': 'tests.fixtures.visualization.stage_1',
@@ -38,7 +38,7 @@ def test_visualize_stages_io(tmpdir):
                              {"id": "tests.fixtures.visualization.stage_1"},
                              {"id": "tests.fixtures.visualization.stage_2"}]
 
-    assert data['links'] == [{'source': 'tests.fixtures.visualization.stage_1',
+    assert data['edges'] == [{'source': 'tests.fixtures.visualization.stage_1',
                               'target': 'tests.fixtures.visualization.stage_3',
                               'key': 0},
                              {'source': 'tests.fixtures.visualization.stage_1',
