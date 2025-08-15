@@ -516,6 +516,9 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
                 explicit_config_keys = upstream["downstream-passed-parameters"] if "downstream-passed-parameters" in upstream else set()
 
                 for key in upstream["config"].keys() - explicit_config_keys:
+                    if key in upstream["volatile_config"]:
+                        continue
+
                     value = upstream["config"][key]
 
                     if key in passed_config_options:
