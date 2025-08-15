@@ -59,7 +59,10 @@ class ParallelMasterContext:
 
         self.progress_context = progress_context
 
-        self.mp = mp.get_context("forkserver")
+        try:
+            self.mp = mp.get_context("forkserver")
+        except ValueError:
+            self.mp = mp.get_context("spawn")
 
     def __enter__(self):
         if not self.pool is None:
