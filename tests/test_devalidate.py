@@ -230,38 +230,55 @@ def test_volatile_config(tmpdir):
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.volatile_b"
-    }], config = { "a": 123 }, working_directory = working_directory, verbose = True)
+    }], config = { "a": 123, "xyz": 0 }, working_directory = working_directory, verbose = True)
 
     assert len(result["stale"]) == 2
-    assert "tests.fixtures.devalidation.volatile_a__99914b932bd37a50b983c5e7c90ae93b" in result["stale"]
-    assert "tests.fixtures.devalidation.volatile_b__c007f8fea8b5cc845e93f593a7ae9cd6" in result["stale"]
+    assert "tests.fixtures.devalidation.volatile_a__e73a2124c3bed6e083733253bf5e7e02" in result["stale"]
+    assert "tests.fixtures.devalidation.volatile_b__e73a2124c3bed6e083733253bf5e7e02" in result["stale"]
     assert result["results"][0] == 123
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.volatile_b"
-    }], config = { "a": 456 }, working_directory = working_directory, verbose = True)
+    }], config = { "a": 456, "xyz": 0 }, working_directory = working_directory, verbose = True)
 
     assert len(result["stale"]) == 1
-    assert "tests.fixtures.devalidation.volatile_b__c007f8fea8b5cc845e93f593a7ae9cd6" not in result["stale"]
+    assert "tests.fixtures.devalidation.volatile_b__e73a2124c3bed6e083733253bf5e7e02" in result["stale"]
     assert result["results"][0] == 123
 
+    result = synpp.run([{
+        "descriptor": "tests.fixtures.devalidation.volatile_c"
+    }], config = { "u": { "v": { "w": 55 } }, "xyz": 0 }, working_directory = working_directory, verbose = True)
+
+    assert len(result["stale"]) == 1
+    assert "tests.fixtures.devalidation.volatile_c__e73a2124c3bed6e083733253bf5e7e02" in result["stale"]
+    assert result["results"][0] == 123
+
+    result = synpp.run([{
+        "descriptor": "tests.fixtures.devalidation.volatile_c"
+    }], config = { "u": { "v": { "w": 55 } }, "xyz": 5000 }, working_directory = working_directory, verbose = True)
+
+    assert len(result["stale"]) == 3
+    assert "tests.fixtures.devalidation.volatile_a__0ba1fcb987f8a10d112b0831cee27ff7" in result["stale"]
+    assert "tests.fixtures.devalidation.volatile_b__0ba1fcb987f8a10d112b0831cee27ff7" in result["stale"]
+    assert "tests.fixtures.devalidation.volatile_c__0ba1fcb987f8a10d112b0831cee27ff7" in result["stale"]
+    assert result["results"][0] == 5155
 
 def test_volatile_config_hierarchical(tmpdir):
     working_directory = tmpdir.mkdir("sub")
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.volatile_b"
-    }], config = { "u": { "v": { "w": 44 } } }, working_directory = working_directory, verbose = True)
+    }], config = { "u": { "v": { "w": 44 } }, "xyz": 0 }, working_directory = working_directory, verbose = True)
 
     assert len(result["stale"]) == 2
-    assert "tests.fixtures.devalidation.volatile_a__99914b932bd37a50b983c5e7c90ae93b" in result["stale"]
-    assert "tests.fixtures.devalidation.volatile_b__aa771c9d4d6ba16fdcb37988e55eab98" in result["stale"]
+    assert "tests.fixtures.devalidation.volatile_a__e73a2124c3bed6e083733253bf5e7e02" in result["stale"]
+    assert "tests.fixtures.devalidation.volatile_b__e73a2124c3bed6e083733253bf5e7e02" in result["stale"]
     assert result["results"][0] == 144
 
     result = synpp.run([{
         "descriptor": "tests.fixtures.devalidation.volatile_b"
-    }], config = { "u": { "v": { "w": 55 } } }, working_directory = working_directory, verbose = True)
+    }], config = { "u": { "v": { "w": 55 } }, "xyz": 0 }, working_directory = working_directory, verbose = True)
 
     assert len(result["stale"]) == 1
-    assert "tests.fixtures.devalidation.volatile_b__aa771c9d4d6ba16fdcb37988e55eab98" not in result["stale"]
+    assert "tests.fixtures.devalidation.volatile_b__e73a2124c3bed6e083733253bf5e7e02" in result["stale"]
     assert result["results"][0] == 144
