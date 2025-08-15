@@ -831,7 +831,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             # Update meta information
             meta[hash] = {
                 "config": stage["config"],
-                "updated": datetime.datetime.now(datetime.UTC).timestamp(),
+                "updated": datetime.datetime.now(datetime.timezone.utc).timestamp(),
                 "dependencies": {
                     dependency_hash: meta[dependency_hash]["updated"] for dependency_hash in stage["dependencies"]
                 },
