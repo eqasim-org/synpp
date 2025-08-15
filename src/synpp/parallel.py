@@ -1,4 +1,5 @@
 import multiprocessing as mp
+
 from .general import PipelineParallelError
 from .progress import ProgressClient
 
@@ -58,6 +59,11 @@ class ParallelMasterContext:
 
         self.progress_context = progress_context
 
+        try:
+            self.mp = mp.get_context("forkserver")
+        except ValueError:
+            self.mp = mp.get_context("spawn")
+
     def __enter__(self):
         if not self.pool is None:
             raise PipelineParallelError("Parallel context has already been entered")
@@ -67,7 +73,7 @@ class ParallelMasterContext:
             if not self.progress_context.server is None:
                 progress_port = self.progress_context.server.port
 
-        self.pool = mp.Pool(
+        self.pool = self.mp.Pool(
             processes = self.processes,
             initializer = pipeline_initializer,
             initargs = (self.data, self.config, progress_port),
