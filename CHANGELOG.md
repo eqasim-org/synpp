@@ -4,6 +4,11 @@
 
 - No updates yet, add them here
 
+**1.6.1**
+
+- Fix for `volatile` options along execution chains
+- Cleanup of recent warnings in the code
+
 **1.6.0**
 
 - Add possibility to override config values to the command line interface
