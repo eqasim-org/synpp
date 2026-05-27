@@ -13,6 +13,7 @@ import shutil
 from typing import Dict, List, Union, Callable
 from types import ModuleType
 from collections.abc import MutableMapping
+from collections import deque
 
 import networkx as nx
 import yaml
@@ -58,6 +59,29 @@ def unflatten(flatten, sep='.'):
             d = d[part]
         d[parts[-1]] = value
     return copy.deepcopy(out)
+
+def has_config_value_flat(name, flat_config):
+    if name in flat_config:
+        return True
+
+    prefix = name + "."
+    for key in flat_config.keys():
+        if key.startswith(prefix):
+            return True
+
+    return False
+
+def get_config_value_flat(name, flat_config):
+    if name in flat_config:
+        return flat_config[name]
+
+    prefix = name + "."
+    values = {}
+    for key, value in flat_config.items():
+        if key.startswith(prefix):
+            values[key[len(prefix):]] = value
+
+    return unflatten(values)
 
 class NoDefaultValue:
     pass
@@ -247,9 +271,38 @@ class Context:
 
 
 class ConfigurationContext(Context):
-    def __init__(self, base_config, config_definitions=[], externals={}, global_aliases={}):
+    def __init__(self, base_config, config_definitions=None, config_requested_stages=None,
+                 config_requested_stage_names=None, externals=None, global_aliases=None,
+                 base_config_is_flat=False):
+        if config_definitions is None:
+            config_definitions = []
+        if externals is None:
+            externals = {}
+        if global_aliases is None:
+            global_aliases = {}
+
         self.base_config = base_config
-        self.config_requested_stages = [resolve_stage(d, externals, global_aliases).instance for d in config_definitions]
+        self.flat_base_config = copy.copy(base_config) if base_config_is_flat else flatten(base_config)
+
+        # Backward-compatible field used by external stages.
+        if config_requested_stages is None:
+            self.config_requested_stages = []
+            for descriptor in config_definitions:
+                resolved = resolve_stage(descriptor, externals, global_aliases)
+                if resolved is not None:
+                    self.config_requested_stages.append(resolved.instance)
+        else:
+            self.config_requested_stages = list(config_requested_stages)
+
+        if config_requested_stage_names is None:
+            self.config_requested_stage_names = set()
+            for requested_stage in self.config_requested_stages:
+                if hasattr(requested_stage, "__name__"):
+                    self.config_requested_stage_names.add(requested_stage.__name__)
+                else:
+                    self.config_requested_stage_names.add("%s.%s" % (requested_stage.__class__.__module__, requested_stage.__class__.__name__))
+        else:
+            self.config_requested_stage_names = set(config_requested_stage_names)
 
         self.required_config = {}
         self.volatile_config = set()
@@ -263,8 +316,8 @@ class ConfigurationContext(Context):
         self.global_aliases = global_aliases
 
     def config(self, option, default = NoDefaultValue(), volatile = False):
-        if has_config_value(option, self.base_config):
-            self.required_config[option] = get_config_value(option, self.base_config)
+        if has_config_value_flat(option, self.flat_base_config):
+            self.required_config[option] = get_config_value_flat(option, self.flat_base_config)
         elif not isinstance(default, NoDefaultValue):
             if option in self.required_config and not self.required_config[option] == default:
                 raise PipelineError("Got multiple default values for config option: %s" % option)
@@ -292,10 +345,14 @@ class ConfigurationContext(Context):
                 self.aliases[alias] = definition
 
     def stage_is_config_requested(self, descriptor):
-        if self.config_requested_stages:
-            return resolve_stage(descriptor, self.externals, self.global_aliases).instance in self.config_requested_stages
-        else:
+        if not self.config_requested_stage_names:
             return False
+
+        resolved = resolve_stage(descriptor, self.externals, self.global_aliases)
+        if resolved is None:
+            return False
+
+        return resolved.name in self.config_requested_stage_names
 
 
 class ValidateContext(Context):
@@ -405,19 +462,29 @@ class ExecuteContext(Context):
 
 
 def process_stages(definitions, global_config, externals={}, aliases={}):
-    pending = copy.copy(definitions)
+    pending = deque(copy.copy(definitions))
     stages = []
+    stage_index_by_key = {}
 
     for index, stage in enumerate(pending):
         stage["required-index"] = index
 
     global_config = flatten(global_config)
 
+    config_requested_stage_names = set()
+    config_requested_stages = []
+    for definition in definitions:
+        resolved = resolve_stage(definition["descriptor"], externals, aliases)
+        if resolved is not None:
+            config_requested_stage_names.add(resolved.name)
+            config_requested_stages.append(resolved.instance)
+
     while len(pending) > 0:
-        definition = pending.pop(0)
+        definition = pending.popleft()
 
         # Resolve the underlying code of the stage
         wrapper = resolve_stage(definition["descriptor"], externals, aliases)
+
         if wrapper is None:
             raise PipelineError(f"{definition['descriptor']} is not a supported object for pipeline stage definition!")
 
@@ -425,11 +492,19 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
         config = copy.copy(global_config)
 
         if "config" in definition:
-            config.update(definition["config"])
+            config.update(flatten(definition["config"]))
 
         # Obtain configuration information through configuration context
-        context = ConfigurationContext(config, [d['descriptor'] for d in definitions], externals)
+        context = ConfigurationContext(
+            config,
+            config_requested_stages=config_requested_stages,
+            config_requested_stage_names=config_requested_stage_names,
+            externals=externals,
+            global_aliases=aliases,
+            base_config_is_flat=True
+        )
         wrapper.configure(context)
+
         required_config = flatten(context.required_config)
         definition = copy.copy(definition)
         definition.update({
@@ -449,9 +524,51 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
             print(cycle_hash)
             raise PipelineError("Found cycle in dependencies: %s" % definition["wrapper"].name)
 
+        if "downstream-index" in definition:
+            dedup_key = (
+                cycle_hash,
+                definition["downstream-index"],
+                definition["downstream-position"],
+                tuple(sorted(definition["downstream-passed-parameters"]))
+            )
+        else:
+            dedup_key = (cycle_hash, None, None, None)
+
+        # Reuse previously expanded stages and only keep per-edge metadata.
+        if dedup_key in stage_index_by_key:
+            stage_index = stage_index_by_key[dedup_key]
+
+            if "required-index" in definition:
+                if "required-index" in stages[stage_index]:
+                    assert stages[stage_index]["required-index"] == definition["required-index"]
+                else:
+                    stages[stage_index]["required-index"] = definition["required-index"]
+
+            if "downstream-index" in definition:
+                stages[stage_index].setdefault("downstream-links", []).append({
+                    "downstream-index": definition["downstream-index"],
+                    "downstream-position": definition["downstream-position"],
+                    "downstream-length": definition["downstream-length"],
+                    "downstream-passed-parameters": definition["downstream-passed-parameters"]
+                })
+
+            continue
+
         # Everything fine, add it
+        definition["hash"] = cycle_hash
+        if "downstream-index" in definition:
+            definition["downstream-links"] = [{
+                "downstream-index": definition["downstream-index"],
+                "downstream-position": definition["downstream-position"],
+                "downstream-length": definition["downstream-length"],
+                "downstream-passed-parameters": definition["downstream-passed-parameters"]
+            }]
+        else:
+            definition["downstream-links"] = []
+
         stages.append(definition)
         stage_index = len(stages) - 1
+        stage_index_by_key[dedup_key] = stage_index
 
         # Process dependencies
         for position, upstream in enumerate(context.required_stages):
@@ -475,45 +592,41 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
             })
             pending.append(upstream)
 
-    # Now go backwards in the tree to find intermediate config requirements and set up dependencies
-    downstream_indices = set([
-        stage["downstream-index"]
-        for stage in stages if "downstream-index" in stage
-    ])
+    # Connect downstream stages with upstream stages via dependency field.
+    # The previous queue-based implementation repeatedly re-traversed chains
+    # and could become extremely expensive for wide/deep trees.
+    for stage_index, stage in enumerate(stages):
+        for link in stage.get("downstream-links", []):
+            downstream = stages[link["downstream-index"]]
 
-    source_indices = set(range(len(stages))) - downstream_indices
-
-    # Connect downstream stages with upstream stages via dependency field
-    pending = list(source_indices)
-
-    while len(pending) > 0:
-        stage_index = pending.pop(0)
-        stage = stages[stage_index]
-
-        if "downstream-index" in stage:
-            downstream = stages[stage["downstream-index"]]
-
-            # Connect this stage with the downstream stage
             if not "dependencies" in downstream:
-                downstream["dependencies"] = [None] * stage["downstream-length"]
+                downstream["dependencies"] = [None] * link["downstream-length"]
 
-            downstream["dependencies"][stage["downstream-position"]] = stage_index
+            downstream["dependencies"][link["downstream-position"]] = {
+                "index": stage_index,
+                "passed_parameters": link["downstream-passed-parameters"]
+            }
 
-            pending.append(stage["downstream-index"])
+    # Update configuration requirements based dependencies.
+    # Dependencies always point to stages that were discovered later, so
+    # iterating indices in reverse ensures each upstream config is final.
+    stage_count = len(stages)
 
-    # Update configuration requirements based dependencies
-    pending = list(source_indices)
-
-    while len(pending) > 0:
-        stage_index = pending.pop(0)
+    for reverse_position, stage_index in enumerate(range(stage_count - 1, -1, -1), start=1):
         stage = stages[stage_index]
 
         if "dependencies" in stage:
             passed_config_options = {}
 
-            for upstream_index in stage["dependencies"]:
+            for dependency in stage["dependencies"]:
+                if isinstance(dependency, dict):
+                    upstream_index = dependency["index"]
+                    explicit_config_keys = dependency["passed_parameters"]
+                else:
+                    upstream_index = dependency
+                    explicit_config_keys = set()
+
                 upstream = stages[upstream_index]
-                explicit_config_keys = upstream["downstream-passed-parameters"] if "downstream-passed-parameters" in upstream else set()
 
                 for key in upstream["config"].keys() - explicit_config_keys:
                     if key in upstream["volatile_config"]:
@@ -531,9 +644,6 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
                     assert stage["config"][key] == value
                 else:
                     stage["config"][key] = value
-
-        if "downstream-index" in stage:
-            pending.append(stage["downstream-index"])
 
     # Hash all stages
     required_hashes = {}
@@ -560,7 +670,8 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
         registry[stage["hash"]] = stage
 
         stage["dependencies"] = [
-            stages[index]["hash"] for index in stage["dependencies"]
+            stages[dependency["index"]]["hash"] if isinstance(dependency, dict) else stages[dependency]["hash"]
+            for dependency in stage["dependencies"]
         ] if "dependencies" in stage else []
 
     for hash in required_hashes:
@@ -597,7 +708,12 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         working_directory = os.path.realpath(working_directory)
 
     # 1) Construct stage registry
-    registry = process_stages(definitions, config, externals, aliases)
+    registry = process_stages(
+        definitions,
+        config,
+        externals,
+        aliases
+    )
 
     required_hashes = [None] * len(definitions)
     for stage in registry.values():
@@ -682,7 +798,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
             logger.info("Did not find pipeline metadata in %s/pipeline.json" % working_directory)
 
     # 4) Devalidate stages
-    sorted_cached_hashes = sorted_hashes - ephemeral_counts.keys()
+    sorted_cached_hashes = [hash for hash in sorted_hashes if hash not in ephemeral_counts]
     stale_hashes = set()
 
     # 4.1) Devalidate if they are required (optional, otherwise will reload from cache)
@@ -744,17 +860,28 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
         cache_path = "%s/%s.cache" % (working_directory, hash)
         context = ValidateContext(stage["config"], cache_path)
 
+        if hash in stale_hashes:
+            continue
+
         validation_token = stage["wrapper"].validate(context)
+
         existing_token = meta[hash]["validation_token"] if hash in meta and "validation_token" in meta[hash] else None
 
         if not validation_token == existing_token:
             stale_hashes.add(hash)
 
     # 4.9) Devalidate descendants of devalidated stages
-    for hash in set(stale_hashes):
-        for descendant_hash in nx.descendants(graph, hash):
-            if not descendant_hash in stale_hashes:
-                stale_hashes.add(descendant_hash)
+    stale_snapshot = set(stale_hashes)
+    for hash in sorted_hashes:
+
+        if hash in stale_snapshot:
+            continue
+
+        for dependency_hash in registry[hash]["dependencies"]:
+            if dependency_hash in stale_snapshot:
+                stale_snapshot.add(hash)
+                stale_hashes.add(hash)
+                break
 
     # 4.10) Devalidate ephemeral stages if necessary
     pending = set(stale_hashes)
@@ -815,7 +942,9 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                 os.mkdir(cache_path)
 
             context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], cache_path, pipeline_config, logger, cache, stage_dependency_info)
+
             result = stage["wrapper"].execute(context)
+
             validation_token = stage["wrapper"].validate(ValidateContext(stage["config"], cache_path))
 
             if hash in required_hashes:
