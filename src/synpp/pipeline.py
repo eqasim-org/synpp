@@ -449,7 +449,7 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
 
         # Identification
         config.update(required_config)
-        identification_hash = hash_name(definition["wrapper"].name, config, {})
+        identification_hash = hash_name(definition["wrapper"].name, config, {}) + (str(definition["ephemeral"]) if "ephemeral" in definition else "")
 
         while identification_hash in hashed_stages:
             identification_hash = "{}+".format(identification_hash)
@@ -471,10 +471,12 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
             upstream = copy.copy(upstream)
             upstream.update({
                 "config": upstream_config,
-                "downstream-hash": identification_hash,
-                "downstream-position": position,
-                "downstream-length": len(context.required_stages),
-                "downstream-passed-parameters": passed_parameters,
+                "downstream": [
+                    { 
+                        "hash": identification_hash, "position": position,
+                        "length": len(context.required_stages), "passed-parameters": passed_parameters 
+                    }
+                ],
                 "cycle_hashes": cycle_hashes,
                 "ephemeral": context.ephemeral_mask[position] or ("ephemeral" in definition and definition["ephemeral"])
             })
@@ -495,16 +497,17 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
         stage_hash = pending.pop(0)
         stage = hashed_stages[stage_hash]
 
-        if "downstream-hash" in stage:
-            downstream = hashed_stages[stage["downstream-hash"]]
+        if "downstream" in stage:
+            downstream_info = stage["downstream"][0]
+            downstream = hashed_stages[downstream_info["hash"]]
 
             # Connect this stage with the downstream stage
             if not "dependencies" in downstream:
-                downstream["dependencies"] = [None] * stage["downstream-length"]
+                downstream["dependencies"] = [None] * downstream_info["length"]
 
-            downstream["dependencies"][stage["downstream-position"]] = stage_hash
+            downstream["dependencies"][downstream_info["position"]] = stage_hash
 
-            pending.append(stage["downstream-hash"])
+            pending.append(downstream_info["hash"])
 
     # Update configuration requirements based dependencies
     pending = list(source_hashes)
@@ -518,7 +521,7 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
 
             for upstream_hash in stage["dependencies"]:
                 upstream = hashed_stages[upstream_hash]
-                explicit_config_keys = upstream["downstream-passed-parameters"] if "downstream-passed-parameters" in upstream else set()
+                explicit_config_keys = upstream["downstream"][0]["passed-parameters"] if "downstream" in upstream else set()
 
                 for key in upstream["config"].keys() - explicit_config_keys:
                     if key in upstream["volatile_config"]:
@@ -537,8 +540,8 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
                 else:
                     stage["config"][key] = value
 
-        if "downstream-hash" in stage:
-            pending.append(stage["downstream-hash"])
+        if "downstream" in stage:
+            pending.append(stage["downstream"][0]["hash"])
 
     # Hash all stages
     required_hashes = {}
