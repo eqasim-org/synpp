@@ -65,7 +65,7 @@ def test_rerun_required(tmpdir):
 
 def test_wrapper(tmpdir):
     working_directory = tmpdir.mkdir("sub")
-    wrapper = synpp.Synpp(working_directory = working_directory, config = {})
+    wrapper = synpp.Synpp(config={'working_directory': working_directory})
     assert 14 == wrapper.run_single(descriptor="tests.fixtures.sum_config", config={"a": 5, "b": 9})
     res = wrapper.run_pipeline(definitions=[{"descriptor": "tests.fixtures.sum_config", "config": {"a": 5, "b": 9}}])
     assert len(res) == 1
