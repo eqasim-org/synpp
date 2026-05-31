@@ -403,10 +403,20 @@ class ExecuteContext(Context):
 
         return self.dependencies[self.required_stages.index(definition)]
 
+def calculate_identification_hash(wrapper, definition):
+    identification_hash = hashlib.md5()
+
+    identification_hash.update(json.dumps({
+        "name": wrapper.name,
+        "config": definition["config"] if "config" in definition else "",
+        "ephemeral": definition["ephemeral"] if "ephemeral" in definition else "unknown"
+    }, sort_keys = True).encode("utf-8"))
+
+    return identification_hash.hexdigest()
 
 def process_stages(definitions, global_config, externals={}, aliases={}):
     pending = copy.copy(definitions)
-    stages = []
+    hashed_stages = {}
 
     for index, stage in enumerate(pending):
         stage["required-index"] = index
@@ -420,6 +430,19 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
         wrapper = resolve_stage(definition["descriptor"], externals, aliases)
         if wrapper is None:
             raise PipelineError(f"{definition['descriptor']} is not a supported object for pipeline stage definition!")
+
+        # A stage that has the same descriptor and is called with the same config
+        # must produce the same logic in the configure method and in execution. We
+        # hence do not examine the same case twice ...
+        identification_hash = calculate_identification_hash(wrapper, definition)
+
+        if identification_hash in hashed_stages:
+            # ... but we need to take care of reconstructing the dependency structure
+
+            stage = hashed_stages[identification_hash]
+            stage["downstream"] += definition["downstream"]
+
+            continue
 
         # Call the configure method of the stage and obtain parameters
         config = copy.copy(global_config)
@@ -445,13 +468,11 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
         cycle_hash = hash_name(definition["wrapper"].name, definition["config"], definition["volatile_config"])
 
         if "cycle_hashes" in definition and cycle_hash in definition["cycle_hashes"]:
-            print(definition["cycle_hashes"])
-            print(cycle_hash)
             raise PipelineError("Found cycle in dependencies: %s" % definition["wrapper"].name)
 
-        # Everything fine, add it
-        stages.append(definition)
-        stage_index = len(stages) - 1
+        # Everything fine, add 
+        hashed_stages[identification_hash] = definition
+        definition["identification-hash"] = identification_hash
 
         # Process dependencies
         for position, upstream in enumerate(context.required_stages):
@@ -466,54 +487,64 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
             upstream = copy.copy(upstream)
             upstream.update({
                 "config": upstream_config,
-                "downstream-index": stage_index,
-                "downstream-position": position,
-                "downstream-length": len(context.required_stages),
-                "downstream-passed-parameters": passed_parameters,
+                "downstream": [
+                    { 
+                        "hash": identification_hash, "position": position,
+                        "length": len(context.required_stages), "passed-parameters": passed_parameters 
+                    }
+                ],
                 "cycle_hashes": cycle_hashes,
                 "ephemeral": context.ephemeral_mask[position] or ("ephemeral" in definition and definition["ephemeral"])
             })
             pending.append(upstream)
 
     # Now go backwards in the tree to find intermediate config requirements and set up dependencies
-    downstream_indices = set([
-        stage["downstream-index"]
-        for stage in stages if "downstream-index" in stage
-    ])
+    downstream_hashes = set()
+    
+    for stage in hashed_stages.values():
+        if "downstream" in stage:
+            for info in stage["downstream"]:
+                downstream_hashes.add(info["hash"])
 
-    source_indices = set(range(len(stages))) - downstream_indices
+    source_hashes = set(hashed_stages.keys()) - downstream_hashes
 
     # Connect downstream stages with upstream stages via dependency field
-    pending = list(source_indices)
+    pending = list(source_hashes)
 
     while len(pending) > 0:
-        stage_index = pending.pop(0)
-        stage = stages[stage_index]
+        stage_hash = pending.pop(0)
+        stage = hashed_stages[stage_hash]
 
-        if "downstream-index" in stage:
-            downstream = stages[stage["downstream-index"]]
+        if "downstream" in stage:
+            for downstream_info in stage["downstream"]:
+                downstream = hashed_stages[downstream_info["hash"]]
 
-            # Connect this stage with the downstream stage
-            if not "dependencies" in downstream:
-                downstream["dependencies"] = [None] * stage["downstream-length"]
+                # Connect this stage with the downstream stage
+                if not "dependencies" in downstream:
+                    downstream["dependencies"] = [None] * downstream_info["length"]
 
-            downstream["dependencies"][stage["downstream-position"]] = stage_index
+                downstream["dependencies"][downstream_info["position"]] = stage_hash
 
-            pending.append(stage["downstream-index"])
+                pending.append(downstream_info["hash"])
 
     # Update configuration requirements based dependencies
-    pending = list(source_indices)
+    pending = list(source_hashes)
 
     while len(pending) > 0:
-        stage_index = pending.pop(0)
-        stage = stages[stage_index]
+        stage_hash = pending.pop(0)
+        stage = hashed_stages[stage_hash]
 
         if "dependencies" in stage:
             passed_config_options = {}
 
-            for upstream_index in stage["dependencies"]:
-                upstream = stages[upstream_index]
-                explicit_config_keys = upstream["downstream-passed-parameters"] if "downstream-passed-parameters" in upstream else set()
+            for upstream_hash in stage["dependencies"]:
+                upstream = hashed_stages[upstream_hash]
+                
+                explicit_config_keys = set()
+
+                if "downstream" in upstream:
+                    for info in upstream["downstream"]:
+                        explicit_config_keys |= info["passed-parameters"]
 
                 for key in upstream["config"].keys() - explicit_config_keys:
                     if key in upstream["volatile_config"]:
@@ -532,12 +563,13 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
                 else:
                     stage["config"][key] = value
 
-        if "downstream-index" in stage:
-            pending.append(stage["downstream-index"])
+        if "downstream" in stage:
+            pending.append(stage["downstream"][0]["hash"])
 
     # Hash all stages
     required_hashes = {}
 
+    stages = hashed_stages.values()
     for stage in stages:
         stage["hash"] = hash_name(stage["wrapper"].name, stage["config"], stage["volatile_config"])
 
@@ -560,7 +592,7 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
         registry[stage["hash"]] = stage
 
         stage["dependencies"] = [
-            stages[index]["hash"] for index in stage["dependencies"]
+            hashed_stages[identification]["hash"] for identification in stage["dependencies"]
         ] if "dependencies" in stage else []
 
     for hash in required_hashes:
