@@ -444,13 +444,17 @@ To define the list of stages to run, provide individual `--run` options. They wi
 --run stage1 --run stage2
 ```
 
-To override configruation, options, prepend them with two dashes:
+To override configuration options, provide the key and value either using `--config` or `-c`:
 
 ``bash
---my.config.option value
+--config my.config.option value
 ``
 
-If a value is already present in the config file, the provided value will automatically be cast to the same data type. If the value does not exist yet, any argument is treated as a string.
+If a value is already present in the config file, the provided value will automatically be cast to the same data type. If the value does not exist yet, any argument is treated as a string by default. If you want to specifically set the value as `int` or `float`, use the following pattern:
+
+``bash
+--config:int my.config.option 55
+``
 
 ## NYC Taxi Example
 
