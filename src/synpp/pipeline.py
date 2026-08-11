@@ -939,11 +939,36 @@ def run_from_cmd(argv):
         elif argv[k] == "--run":
             run.add(argv[k + 1])
             k += 2
-        elif argv[k].startswith("--"):
-            option = argv[k][2:]
-            value = argv[k + 1]
+        elif argv[k].startswith("--config") or argv[k].startswith("-c"):
+            remainder = ""
+
+            if argv[k].startswith("--config"):
+                remainder = argv[k].replace("--config", "")
+
+            if argv[k].startswith("-c"):
+                remainder = argv[k].replace("-c", "")
+
+            converter = str
+            if len(remainder) > 0:
+                assert remainder[0] == ":", "Expected type info for config entry"
+                remainder = remainder[1:]
+
+                if remainder == "int":
+                    converter = int
+                elif remainder == "float":
+                    converter = float
+                elif remainder == "json":
+                    converter = json.loads
+                else:
+                    raise RuntimeError("Unknown converter: ".format(remainder))
+
+            if not (k + 2 < len(argv)):
+                raise RuntimeError("Expected a config key and a value")
+
+            option = argv[k + 1]
+            value = converter(argv[k + 2])
             overrides[option] = value
-            k += 2
+            k += 3
         else:
             if config_path is not None:
                 raise RuntimeError("Config path already provided")
