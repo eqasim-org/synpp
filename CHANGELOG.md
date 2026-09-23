@@ -4,6 +4,10 @@
 
 - No updates yet, add them here
 
+**1.7.0**
+
+- BC: Updated command line configuration pattern.
+
 **1.6.1**
 
 - Fix for `volatile` options along execution chains
