@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v5
         with:
-          release-type: python
+          release-type: simple
           token: ${{ secrets.RELEASE }}
       - uses: actions/checkout@v7
         if: ${{ steps.release.outputs.release_created }}
