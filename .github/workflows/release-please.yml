@@ -19,7 +19,8 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE }}
         run: |
           echo "Token length: ${#GH_TOKEN}"
-          gh api user --jq '.login'
+          echo ${GH_TOKEN}
+          gh api user
           gh api repos/${{ github.repository }} --jq '.full_name'
       - uses: googleapis/release-please-action@v5
         with:
