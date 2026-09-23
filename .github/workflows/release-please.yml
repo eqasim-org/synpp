@@ -14,6 +14,19 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      - name: Test GitHub API
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE }}
+        run: |
+          set -x
+
+          gh api \
+            repos/${{ github.repository }}/commits/e7c0abd54c2397accb223e4c1a54a03406dc49b7 \
+            --jq '.sha, (.files | length)'
+
+          gh api \
+            repos/${{ github.repository }}/commits/29ff91b2c7aef99cdc946bf8110f195edda12376 \
+            --jq '.sha, (.files | length)'
       - uses: googleapis/release-please-action@v5
         with:
           release-type: simple
