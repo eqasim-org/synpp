@@ -14,14 +14,25 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - name: Check token
+      - name: Diagnose tokens
         env:
-          GH_TOKEN: ${{ secrets.RELEASE }}
+          RP_TOKEN: ${{ secrets.RELEASE }}
+          ACTION_TOKEN: ${{ github.token }}
         run: |
-          echo "Token length: ${#GH_TOKEN}"
-          echo ${GH_TOKEN}
-          gh api user
-          gh api repos/${{ github.repository }} --jq '.full_name'
+          echo "RP token length: ${#RP_TOKEN}"
+          echo "Action token length: ${#ACTION_TOKEN}"
+
+          echo "--- PAT ---"
+          GH_TOKEN="$RP_TOKEN" gh api user --jq '.login'
+          GH_TOKEN="$RP_TOKEN" gh api \
+            repos/${{ github.repository }}/commits/29ff91b2c7aef99cdc946bf8110f195edda12376 \
+            --jq '{sha: .sha, files: (.files | length)}'
+
+          echo "--- Actions GITHUB_TOKEN ---"
+          GH_TOKEN="$ACTION_TOKEN" gh api user --jq '.login'
+          GH_TOKEN="$ACTION_TOKEN" gh api \
+            repos/${{ github.repository }}/commits/29ff91b2c7aef99cdc946bf8110f195edda12376 \
+            --jq '{sha: .sha, files: (.files | length)}'
       - uses: googleapis/release-please-action@v5
         with:
           release-type: simple
