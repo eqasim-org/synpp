@@ -1,7 +1,5 @@
 # Synthetic Population Pipeline (synpp)
 
-[![Build Status](https://travis-ci.org/eqasim-org/synpp.svg?branch=develop)](https://travis-ci.org/eqasim-org/synpp)
-
 The *synpp* module is a tool to chain different stages of a (population)
 synthesis pipeline. This means that self-contained pieces of code can be
 run, which are dependent on the outputs of other self-contained pieces
@@ -14,13 +12,14 @@ and calculates the average vehicle occupancy during a predefined period.
 
 ## Installation
 
-The `synpp` package releases can be installed via `pip`:
+The `synpp` package releases can be installed via `pip` or `uv`:
 
 ```sh
 pip install synpp
+uv add synpp
 ```
 
-Currently, version `1.7.0` is the active release version. Alternatively, you can
+You can find the most recent release `https://github.com/eqasim-org/synpp/releases`. Alternatively, you can
 clone the `develop` branch of this repository to use the development version.
 It can be installed by calling
 
