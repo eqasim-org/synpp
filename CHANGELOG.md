@@ -1,4 +1,14 @@
-# CHANGELOG
+# Changelog
+
+## [1.7.3](https://github.com/eqasim-org/synpp/compare/v1.7.2...v1.7.3) (2026-09-23)
+
+
+### Bug Fixes
+
+* implicit config dependency propagation ([#98](https://github.com/eqasim-org/synpp/issues/98)) ([fafb29b](https://github.com/eqasim-org/synpp/commit/fafb29b3bc1f279ebde4296704ab18235144032d))
+* testing release-please ([#102](https://github.com/eqasim-org/synpp/issues/102)) ([15aef09](https://github.com/eqasim-org/synpp/commit/15aef098560938de4a8e5ef808c7897631070888))
+
+## CHANGELOG
 
 **Under development**
 
