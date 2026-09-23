@@ -564,7 +564,8 @@ def process_stages(definitions, global_config, externals={}, aliases={}):
                     stage["config"][key] = value
 
         if "downstream" in stage:
-            pending.append(stage["downstream"][0]["hash"])
+            for downstream in stage["downstream"]:
+                pending.append(downstream["hash"])
 
     # Hash all stages
     required_hashes = {}
