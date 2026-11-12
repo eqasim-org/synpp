@@ -1,3 +1,0 @@
--r requirements.txt
-pytest>=5.3.1
-pandas>=0.25.3
