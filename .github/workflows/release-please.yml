@@ -22,7 +22,7 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
       - name: Install uv
         if: ${{ steps.release.outputs.release_created }}
-        uses: astral-sh/setup-uv@v9
+        uses: astral-sh/setup-uv@v10.3.0
       - name: Build synpp
         if: ${{ steps.release.outputs.release_created }}
         run: uv build --no-sources
