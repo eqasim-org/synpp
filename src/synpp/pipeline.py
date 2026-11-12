@@ -867,7 +867,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                     rmtree(cache_path)
                 os.mkdir(cache_path)
 
-            context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], cache_path, pipeline_config, logger, cache, stage_dependency_info)
+            context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], cache_path, project_path, pipeline_config, logger, cache, stage_dependency_info)
             result = stage["wrapper"].execute(context)
             validation_token = stage["wrapper"].validate(ValidateContext(stage["config"], cache_path, project_path))
 
