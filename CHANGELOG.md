@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/eqasim-org/synpp/compare/v1.7.3...v1.8.0) (2026-11-12)
+
+
+### Features
+
+* add project path ([#105](https://github.com/eqasim-org/synpp/issues/105)) ([0951729](https://github.com/eqasim-org/synpp/commit/095172993b7ab4e024351dda3cde2bc1feca980d))
+
 ## [1.7.3](https://github.com/eqasim-org/synpp/compare/v1.7.2...v1.7.3) (2026-09-23)
 
 
