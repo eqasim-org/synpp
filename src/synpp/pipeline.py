@@ -13,6 +13,7 @@ import shutil
 from typing import Dict, List, Union, Callable
 from types import ModuleType
 from collections.abc import MutableMapping
+from pathlib import Path
 
 import networkx as nx
 import yaml
@@ -21,6 +22,16 @@ from networkx.readwrite.json_graph import node_link_data
 from .general import PipelineError
 from .parallel import ParallelMasterContext, ParalelMockMasterContext
 from .progress import ProgressContext
+
+
+def apply_project_path(path, project_path: Path | None):
+    """Makes a given path relative to the project path or returns the original path if it is absolute"""
+
+    if project_path is None or Path(path).is_absolute():
+        return path
+
+    return project_path / path
+
 
 # The following two functions extend shutil.rmtree, because by default it
 # refuses to delete write-protected files on Windows. However, we often want
@@ -299,9 +310,10 @@ class ConfigurationContext(Context):
 
 
 class ValidateContext(Context):
-    def __init__(self, required_config, cache_path):
+    def __init__(self, required_config, cache_path, project_path: Path):
         self.required_config = required_config
         self.cache_path = cache_path
+        self._project_path = project_path
 
     def config(self, option):
         if not option in self.required_config:
@@ -309,17 +321,18 @@ class ValidateContext(Context):
 
         return self.required_config[option]
 
-    def path(self):
-        return self.cache_path
+    def project_path(self, suffix = None):
+        return self._project_path if suffix is None else apply_project_path(suffix, self._project_path)
 
 
 class ExecuteContext(Context):
-    def __init__(self, required_config, required_stages, aliases, working_directory, dependencies, cache_path, pipeline_config, logger, cache, dependency_info):
+    def __init__(self, required_config, required_stages, aliases, working_directory, dependencies, cache_path, project_path, pipeline_config, logger, cache, dependency_info):
         self.required_config = required_config
         self.working_directory = working_directory
         self.dependencies = dependencies
         self.pipeline_config = pipeline_config
         self.cache_path = cache_path
+        self._project_path = project_path
         self.logger = logger
         self.stage_info = {}
         self.dependency_cache = {}
@@ -358,6 +371,9 @@ class ExecuteContext(Context):
 
         dependency = self._get_dependency({ "descriptor": name, "config": config })
         return "%s/%s.cache" % (self.working_directory, dependency)
+
+    def project_path(self, suffix = None):
+        return self._project_path if suffix is None else apply_project_path(suffix, self._project_path)
 
     def set_info(self, name, value):
         self.stage_info[name] = value
@@ -614,7 +630,11 @@ def update_json(meta, working_directory):
 
 def run(definitions, config = {}, working_directory = None, flowchart_path = None, dryrun = False, verbose = False,
         logger = logging.getLogger("synpp"), rerun_required=True, ensure_working_directory=False,
-        externals = {}, aliases = {}):
+        externals = {}, aliases = {}, project_path: Path | None = None):
+    # transform paths
+    working_directory = apply_project_path(working_directory, project_path)
+    flowchart_path = apply_project_path(flowchart_path, project_path)
+    
     # 0) Construct pipeline config
     pipeline_config = {}
     if "processes" in config: pipeline_config["processes"] = config["processes"]
@@ -775,7 +795,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     for hash in sorted_cached_hashes:
         stage = registry[hash]
         cache_path = "%s/%s.cache" % (working_directory, hash)
-        context = ValidateContext(stage["config"], cache_path)
+        context = ValidateContext(stage["config"], cache_path, project_path)
 
         validation_token = stage["wrapper"].validate(context)
         existing_token = meta[hash]["validation_token"] if hash in meta and "validation_token" in meta[hash] else None
@@ -847,9 +867,9 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
                     rmtree(cache_path)
                 os.mkdir(cache_path)
 
-            context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], cache_path, pipeline_config, logger, cache, stage_dependency_info)
+            context = ExecuteContext(stage["config"], stage["required_stages"], stage["aliases"], working_directory, stage["dependencies"], cache_path, project_path, pipeline_config, logger, cache, stage_dependency_info)
             result = stage["wrapper"].execute(context)
-            validation_token = stage["wrapper"].validate(ValidateContext(stage["config"], cache_path))
+            validation_token = stage["wrapper"].validate(ValidateContext(stage["config"], cache_path, project_path))
 
             if hash in required_hashes:
                 results[required_hashes.index(hash)] = result
@@ -989,7 +1009,7 @@ def run_from_cmd(argv):
 class Synpp:
     def __init__(self, config: dict, working_directory: str = None, logger: logging.Logger = logging.getLogger("synpp"),
                  definitions: List[Dict[str, Union[str, Callable, ModuleType]]] = None, flowchart_path: str = None,
-                 dryrun: bool = False, externals: Dict[str, str] = {}, aliases = {}):
+                 dryrun: bool = False, externals: Dict[str, str] = {}, aliases = {}, project_path: Path | None = None):
         self.config = config
         self.working_directory = working_directory
         self.logger = logger
@@ -998,6 +1018,7 @@ class Synpp:
         self.dryrun = dryrun
         self.externals = externals
         self.aliases = aliases
+        self.project_path = project_path
 
     def run_pipeline(self, definitions=None, rerun_required=True, dryrun=None, verbose=False, flowchart_path=None):
         if definitions is None and self.definitions is None:
@@ -1008,18 +1029,22 @@ class Synpp:
             dryrun = self.dryrun
         return run(definitions, self.config, self.working_directory, flowchart_path=flowchart_path,
                    dryrun=dryrun, verbose=verbose, logger=self.logger, rerun_required=rerun_required,
-                   ensure_working_directory=True, externals=self.externals, aliases=self.aliases)
+                   ensure_working_directory=True, externals=self.externals, aliases=self.aliases,
+                   project_path = self.project_path)
 
     def run_single(self, descriptor, config={}, rerun_if_cached=False, dryrun=False, verbose=False):
         return run([{'descriptor': descriptor, 'config': config}], self.config, self.working_directory,
                    dryrun=dryrun, verbose=verbose, logger=self.logger, rerun_required=rerun_if_cached,
                    flowchart_path=self.flowchart_path, ensure_working_directory=True, externals=self.externals,
-                   aliases=self.aliases)[0]
+                   aliases=self.aliases, project_path = self.project_path)[0]
 
     @staticmethod
     def build_from_yml(config_path, working_directory = None, run = [], overrides = {}):
         with open(config_path) as f:
             settings = yaml.load(f, Loader=yaml.SafeLoader)
+
+        # get folder in which is the config
+        project_path = Path(config_path).parent
 
         definitions = []
 
@@ -1063,7 +1088,8 @@ class Synpp:
         aliases = settings["aliases"] if "aliases" in settings else {}
 
         return Synpp(config=config, working_directory=working_directory, definitions=definitions,
-                     flowchart_path=flowchart_path, dryrun=dryrun, externals=externals, aliases=aliases)
+                     flowchart_path=flowchart_path, dryrun=dryrun, externals=externals, aliases=aliases,
+                     project_path = project_path)
 
 
 def stage(function=None, *args, **kwargs):
