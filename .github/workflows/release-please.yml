@@ -20,13 +20,14 @@ jobs:
           token: "${{ secrets.RELEASE }}"
       - uses: actions/checkout@v7
         if: ${{ steps.release.outputs.release_created }}
-      - uses: actions/setup-python@v6
+      - name: Install uv
         if: ${{ steps.release.outputs.release_created }}
-        with:
-          python-version: "3.10"
-      - name: Publish
+        uses: astral-sh/setup-uv@v10.3.0
+      - name: Build synpp
         if: ${{ steps.release.outputs.release_created }}
-        run: |
-          pip install --upgrade build twine
-          python -m build
-          python3 -m twine upload -u __token__ -p ${{ secrets.PYPI }} dist/*
+        run: uv build --no-sources
+      - name: Publish synpp
+        if: ${{ steps.release.outputs.release_created }}
+        run: uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI }}
