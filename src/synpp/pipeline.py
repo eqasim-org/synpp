@@ -313,7 +313,7 @@ class ValidateContext(Context):
     def __init__(self, required_config, cache_path, project_path: Path):
         self.required_config = required_config
         self.cache_path = cache_path
-        self.project_path = project_path
+        self._project_path = project_path
 
     def config(self, option):
         if not option in self.required_config:
@@ -322,7 +322,7 @@ class ValidateContext(Context):
         return self.required_config[option]
 
     def project_path(self, suffix = None):
-        return self.project_path if suffix is None else apply_project_path(suffix, self.project_path)
+        return self._project_path if suffix is None else apply_project_path(suffix, self._project_path)
 
 
 class ExecuteContext(Context):
@@ -332,7 +332,7 @@ class ExecuteContext(Context):
         self.dependencies = dependencies
         self.pipeline_config = pipeline_config
         self.cache_path = cache_path
-        self.project_path = project_path
+        self._project_path = project_path
         self.logger = logger
         self.stage_info = {}
         self.dependency_cache = {}
@@ -373,7 +373,7 @@ class ExecuteContext(Context):
         return "%s/%s.cache" % (self.working_directory, dependency)
 
     def project_path(self, suffix = None):
-        return self.project_path if suffix is None else apply_project_path(suffix, self.project_path)
+        return self._project_path if suffix is None else apply_project_path(suffix, self._project_path)
 
     def set_info(self, name, value):
         self.stage_info[name] = value
