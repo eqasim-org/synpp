@@ -266,6 +266,20 @@ have been defined as dependencies before. Note that the pipeline cannot enforce
 that one stage is not corrupting the cache path of another stage. Therefore,
 by convention, a stage should never *write* to the cache path of another stage.
 
+### Project path
+
+The context has a specific method called `project_path`. It refers to paths that are relative to the configuration file:
+
+```python
+def execute(context):
+  context.project_path() # the parent directory of the configuration file
+  context.project_path("folder/myfile.csv") # constructing a path relative to the configuration file
+
+  # if absolute paths are given, they are retained:
+  context.project_path("/home/user/absolute.csv")
+  
+```
+
 ### Aliases
 
 Once a pipeline has been defined, the structure is relatively rigid as stages
