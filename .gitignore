@@ -7,3 +7,6 @@ src/synpp.egg-info
 .idea/
 .synpp_cache
 .vscode/
+uv.lock
+.venv
+.pytest_cache
