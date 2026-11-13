@@ -1,6 +1,6 @@
 [project]
 name = "synpp"
-version = "1.8.0"
+version = "1.8.1"
 description = "Synthetic population pipeline package for eqasim"
 readme = "README.md"
 requires-python = ">=3.10"

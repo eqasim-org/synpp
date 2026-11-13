@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/eqasim-org/synpp/compare/v1.8.0...v1.8.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* unhide default cache ([#109](https://github.com/eqasim-org/synpp/issues/109)) ([964945b](https://github.com/eqasim-org/synpp/commit/964945bf4999402338fe1645b7c703720c9f7b18))
+
 ## [1.8.0](https://github.com/eqasim-org/synpp/compare/v1.7.3...v1.8.0) (2026-11-12)
 
 
