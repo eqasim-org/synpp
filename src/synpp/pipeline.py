@@ -641,7 +641,7 @@ def run(definitions, config = {}, working_directory = None, flowchart_path = Non
     if "progress_interval" in config: pipeline_config["progress_interval"] = config["progress_interval"]
 
     if ensure_working_directory and working_directory is None:
-        working_directory = '.synpp_cache'
+        working_directory = '_synpp_cache'
     if working_directory is not None:
         if not os.path.isdir(working_directory) and ensure_working_directory:
             logger.warning("Working directory does not exist, it will be created: %s" % working_directory)
