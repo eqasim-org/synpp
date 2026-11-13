@@ -10,3 +10,4 @@ src/synpp.egg-info
 uv.lock
 .venv
 .pytest_cache
+_synpp_cache
